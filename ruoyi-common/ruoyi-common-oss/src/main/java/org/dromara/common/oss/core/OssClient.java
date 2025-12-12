@@ -2,6 +2,7 @@ package org.dromara.common.oss.core;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.IdUtil;
+import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.constant.Constants;
 import org.dromara.common.core.utils.DateUtils;
@@ -14,12 +15,18 @@ import org.dromara.common.oss.exception.OssException;
 import org.dromara.common.oss.properties.OssProperties;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.async.*;
+import software.amazon.awssdk.core.async.AsyncRequestBody;
+import software.amazon.awssdk.core.async.AsyncResponseTransformer;
+import software.amazon.awssdk.core.async.BlockingInputStreamAsyncRequestBody;
+import software.amazon.awssdk.core.async.ResponsePublisher;
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.*;
@@ -33,8 +40,15 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
  * S3 存储协议 所有兼容S3协议的云厂商均支持
@@ -69,6 +83,11 @@ public class OssClient {
      * AWS S3 预签名 URL 的生成器
      */
     private final S3Presigner presigner;
+
+    /**
+     * 空目录占位文件名
+     */
+    private static final String EMPTY_DIR_PLACEHOLDER = ".!@#$%^&";
 
     /**
      * 构造方法
@@ -520,6 +539,1025 @@ public class OssClient {
      */
     public AccessPolicyType getAccessPolicy() {
         return AccessPolicyType.getByType(properties.getAccessPolicy());
+    }
+
+    /**
+     * 创建目录（通过创建占位文件实现，多级目录每层都创建占位文件）
+     *
+     * @param path 目录路径(例如: "/a/b/c" 或 "a/b/c")
+     * @throws OssException 如果创建失败，抛出自定义异常
+     */
+    public void createDirectory(String path) {
+        try {
+            // 规范化路径
+            String normalized = path.trim();
+
+            // 去掉开头的所有"/"
+            while (normalized.startsWith("/")) {
+                normalized = normalized.substring(1);
+            }
+
+            // 去掉结尾的所有"/"
+            while (normalized.endsWith("/")) {
+                normalized = normalized.substring(0, normalized.length() - 1);
+            }
+
+            if (normalized.isEmpty()) {
+                throw new OssException("目录路径不能为空");
+            }
+
+            // 分割路径，为每一层创建占位文件
+            String[] parts = normalized.split("/");
+            StringBuilder currentPath = new StringBuilder();
+
+            int createdCount = 0;
+            for (String part : parts) {
+                if (!currentPath.isEmpty()) {
+                    currentPath.append("/");
+                }
+                currentPath.append(part);
+
+                // 为当前层级创建占位文件
+                String placeholderKey = currentPath.toString() + "/" + EMPTY_DIR_PLACEHOLDER;
+
+                log.debug("创建目录层级: [{}]，占位文件: [{}]", currentPath, placeholderKey);
+
+                // 检查占位文件是否已存在，避免重复创建
+                if (!checkFileExists(placeholderKey)) {
+                    client.putObject(
+                        request -> request
+                            .bucket(properties.getBucketName())
+                            .key(placeholderKey)
+                            .contentType("application/octet-stream")
+                            .contentLength(0L)
+                            .build(),
+                        AsyncRequestBody.empty()
+                    ).join();
+
+                    createdCount++;
+                    log.debug("占位文件创建成功: {}", placeholderKey);
+                } else {
+                    log.debug("占位文件已存在，跳过: {}", placeholderKey);
+                }
+            }
+
+            log.info("目录创建成功: [{}]，共创建 {} 层目录", normalized, createdCount);
+
+        } catch (Exception e) {
+            log.error("创建目录失败: [{}], 错误: {}", path, e.getMessage(), e);
+            throw new OssException("创建目录失败:[" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * 查询指定目录下的内容（过滤占位文件）
+     *
+     * @param path 目录路径(例如: "/a/b/c" 或 "/" 或 "a/b/c")
+     * @return JSONObject 包含文件(contents)和文件夹(commonPrefixes)
+     * @throws OssException 如果查询失败,抛出自定义异常
+     */
+    public JSONObject listDirectory(String path) {
+        try {
+            // 处理路径：去掉开头的"/"，确保结尾有"/"
+            String prefix = path;
+            if (prefix.startsWith("/")) {
+                prefix = prefix.substring(1);
+            }
+            if (!prefix.isEmpty() && !prefix.endsWith("/")) {
+                prefix = prefix + "/";
+            }
+
+            // 如果是根目录，prefix为空字符串
+            if ("/".equals(path) || path.isEmpty()) {
+                prefix = "";
+            }
+
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(prefix)
+                .delimiter("/")
+                .build();
+
+            ListObjectsV2Response listObjectsV2Response = client.listObjectsV2(request).join();
+
+            // 保存当前的 prefix，用于过滤
+            final String currentPrefix = prefix;
+
+            return JSONObject.of(
+                "folders", listObjectsV2Response.commonPrefixes().stream()
+                    .map(commonPrefix -> JSONObject.of("key", commonPrefix.prefix()))
+                    .toList(),
+                "files", listObjectsV2Response.contents().stream()
+                    // 过滤掉以 "/" 结尾的目录标记对象
+                    .filter(s3Object -> !s3Object.key().endsWith("/"))
+                    // 过滤掉占位文件
+                    .filter(s3Object -> !s3Object.key().endsWith("/" + EMPTY_DIR_PLACEHOLDER))
+                    // 过滤掉当前目录本身
+                    .filter(s3Object -> !s3Object.key().equals(currentPrefix))
+                    .map(s3Object -> JSONObject.of(
+                        "key", s3Object.key(),
+                        "lastModified", s3Object.lastModified()
+                            .atZone(ZoneId.of("Asia/Shanghai"))
+                            .truncatedTo(ChronoUnit.SECONDS)
+                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                        "tag", s3Object.eTag(),
+                        "size", s3Object.size()
+                    ))
+                    .toList()
+            );
+
+        } catch (Exception e) {
+            throw new OssException("查询目录内容失败:[" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * 判断指定目录是否存在
+     *
+     * @param path 目录路径(例如: "/a/b/c" 或 "a/b/c" 或 "a/b/c/")
+     * @return true-目录存在, false-目录不存在
+     * @throws OssException 如果查询失败，抛出自定义异常
+     */
+    public boolean directoryExists(String path) {
+        try {
+            // 处理路径：去掉开头的"/"，确保结尾有"/"
+            String directoryPath = path;
+            if (directoryPath.startsWith("/")) {
+                directoryPath = directoryPath.substring(1);
+            }
+            if (!directoryPath.isEmpty() && !directoryPath.endsWith("/")) {
+                directoryPath = directoryPath + "/";
+            }
+
+            // 构建列表请求，查询指定前缀的对象
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(directoryPath)
+                .maxKeys(1)
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            // 如果存在内容或公共前缀，说明目录存在
+            boolean exists = !response.contents().isEmpty() || !response.commonPrefixes().isEmpty();
+
+            log.debug("目录 {} 存在性检查结果: {}", path, exists);
+            return exists;
+
+        } catch (Exception e) {
+            throw new OssException("检查目录是否存在失败:[" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * 下载指定目录下的所有文件并打包成ZIP（保留顶层目录，排除占位文件）
+     *
+     * @param directoryPath 目录路径(例如: "/a/b/c" 或 "a/b/c" 或 "2025")
+     * @param outputStream  输出流，ZIP文件将写入此流
+     * @throws OssException 如果下载或打包失败，抛出自定义异常
+     */
+    public void downloadDirectoryAsZip(String directoryPath, OutputStream outputStream) {
+        ZipOutputStream zipOut = null;
+        try {
+            // 处理路径：去掉开头的"/"，确保结尾有"/"
+            String prefix = directoryPath;
+            if (prefix.startsWith("/")) {
+                prefix = prefix.substring(1);
+            }
+            if (!prefix.isEmpty() && !prefix.endsWith("/")) {
+                prefix = prefix + "/";
+            }
+
+            // 提取顶层目录名称（用于ZIP中的根目录）
+            String topLevelDirName = extractTopLevelDirName(directoryPath);
+
+            // 创建ZIP输出流
+            zipOut = new ZipOutputStream(outputStream);
+
+            // 递归列出目录下所有文件
+            listAllFiles(prefix, zipOut, prefix, topLevelDirName);
+
+            zipOut.finish();
+            log.info("目录打包下载成功: {}", directoryPath);
+        } catch (Exception e) {
+            throw new OssException("下载目录并打包失败:[" + e.getMessage() + "]");
+        } finally {
+            if (zipOut != null) {
+                try {
+                    zipOut.close();
+                } catch (IOException e) {
+                    log.error("关闭ZIP输出流失败", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * 递归列出所有文件并添加到ZIP中（排除占位文件）
+     *
+     * @param prefix          当前目录前缀
+     * @param zipOut          ZIP输出流
+     * @param basePrefix      基础前缀，用于计算相对路径
+     * @param topLevelDirName 顶层目录名称
+     * @throws IOException 如果IO操作失败
+     */
+    private void listAllFiles(String prefix, ZipOutputStream zipOut, String basePrefix, String topLevelDirName) throws IOException {
+        try {
+            // 构建列表请求
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(prefix)
+                .delimiter("/")
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            // 处理当前目录下的文件
+            List<S3Object> contents = response.contents();
+            for (S3Object s3Object : contents) {
+                String key = s3Object.key();
+
+                // 跳过目录标记对象（以/结尾的空对象）
+                if (key.endsWith("/")) {
+                    continue;
+                }
+
+                // 跳过占位文件（关键！）
+                if (key.endsWith("/" + EMPTY_DIR_PLACEHOLDER)) {
+                    log.debug("跳过占位文件: {}", key);
+                    continue;
+                }
+
+                // 计算ZIP中的相对路径（包含顶层目录）
+                String relativePath = key.substring(basePrefix.length());
+                if (relativePath.isEmpty()) {
+                    continue;
+                }
+
+                // 拼接顶层目录名称
+                String zipEntryName = topLevelDirName + "/" + relativePath;
+
+                // 下载文件并写入ZIP
+                addFileToZip(key, zipEntryName, zipOut);
+            }
+
+            // 递归处理子目录
+            List<String> commonPrefixes = response.commonPrefixes().stream()
+                .map(cp -> cp.prefix())
+                .toList();
+
+            for (String subPrefix : commonPrefixes) {
+                listAllFiles(subPrefix, zipOut, basePrefix, topLevelDirName);
+            }
+
+        } catch (Exception e) {
+            throw new IOException("列出文件失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 提取顶层目录名称
+     *
+     * @param directoryPath 目录路径
+     * @return 顶层目录名称
+     */
+    private String extractTopLevelDirName(String directoryPath) {
+        // 去掉首尾的斜杠
+        String path = directoryPath.trim();
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        // 如果路径为空，返回默认名称
+        if (path.isEmpty()) {
+            return "root";
+        }
+
+        // 获取最后一个路径段作为顶层目录名
+        int lastSlashIndex = path.lastIndexOf('/');
+        if (lastSlashIndex >= 0) {
+            return path.substring(lastSlashIndex + 1);
+        }
+
+        return path;
+    }
+
+    /**
+     * 将单个文件添加到ZIP中
+     *
+     * @param objectKey    S3对象键
+     * @param zipEntryName ZIP中的条目名称
+     * @param zipOut       ZIP输出流
+     * @throws IOException 如果IO操作失败
+     */
+    private void addFileToZip(String objectKey, String zipEntryName, ZipOutputStream zipOut) throws IOException {
+        try {
+            // 创建ZIP条目
+            ZipEntry zipEntry = new ZipEntry(zipEntryName);
+            zipOut.putNextEntry(zipEntry);
+
+            // 下载文件内容
+            DownloadRequest<ResponsePublisher<GetObjectResponse>> downloadRequest = DownloadRequest.builder()
+                .getObjectRequest(y -> y.bucket(properties.getBucketName())
+                    .key(objectKey)
+                    .build())
+                .responseTransformer(AsyncResponseTransformer.toPublisher())
+                .build();
+
+            Download<ResponsePublisher<GetObjectResponse>> download = transferManager.download(downloadRequest);
+            ResponsePublisher<GetObjectResponse> publisher = download.completionFuture().join().result();
+
+            // 使用临时缓冲区写入ZIP
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            WritableByteChannel channel = Channels.newChannel(buffer);
+
+            publisher.subscribe(byteBuffer -> {
+                while (byteBuffer.hasRemaining()) {
+                    try {
+                        channel.write(byteBuffer);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }).join();
+
+            channel.close();
+
+            // 将缓冲区内容写入ZIP
+            buffer.writeTo(zipOut);
+            zipOut.closeEntry();
+
+            log.debug("文件已添加到ZIP: {}", zipEntryName);
+
+        } catch (Exception e) {
+            throw new IOException("添加文件到ZIP失败: " + objectKey, e);
+        }
+    }
+
+    /**
+     * 上传ZIP文件流并解压到指定目录（自动处理同名文件和目录冲突）
+     *
+     * @param targetPath     目标目录路径(例如: "a/b/c" 或 "2025")
+     * @param zipInputStream ZIP文件输入流
+     * @return 上传结果信息
+     */
+    public String uploadDirectoryFromZip(String targetPath, InputStream zipInputStream) {
+        ZipInputStream zis = null;
+        java.util.Set<String> directories = new java.util.HashSet<>();
+
+        try {
+            // 处理目标路径
+            String basePath = targetPath;
+            if (basePath.startsWith("/")) {
+                basePath = basePath.substring(1);
+            }
+            if (!basePath.isEmpty() && !basePath.endsWith("/")) {
+                basePath = basePath + "/";
+            }
+
+            zis = new ZipInputStream(zipInputStream);
+            ZipEntry entry;
+
+            // 读取所有条目
+            java.util.Map<String, byte[]> allEntries = new java.util.LinkedHashMap<>();
+
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    zis.closeEntry();
+                    continue;
+                }
+
+                String fileName = entry.getName();
+                if (fileName.contains("__MACOSX") || fileName.startsWith("._")) {
+                    zis.closeEntry();
+                    continue;
+                }
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
+
+                allEntries.put(fileName, baos.toByteArray());
+                zis.closeEntry();
+            }
+
+            // 用于记录已处理的路径映射（原路径 -> 新路径）
+            java.util.Map<String, String> pathMapping = new java.util.HashMap<>();
+
+            int uploadCount = 0;
+            for (java.util.Map.Entry<String, byte[]> entryData : allEntries.entrySet()) {
+                String originalPath = entryData.getKey();
+                byte[] fileData = entryData.getValue();
+
+                // 处理路径冲突
+                String resolvedPath = resolvePathConflicts(basePath, originalPath, pathMapping);
+
+                String objectKey = basePath + resolvedPath;
+
+                // 收集所有父目录路径
+                collectAllParentDirectories(objectKey, directories);
+
+                String contentType = getContentTypeFromFileName(originalPath);
+
+                upload(new ByteArrayInputStream(fileData), objectKey, (long) fileData.length, contentType);
+
+                uploadCount++;
+                log.debug("文件上传成功: {}", objectKey);
+            }
+
+            // 为所有目录创建占位文件
+            int placeholderCount = 0;
+            for (String dirPath : directories) {
+                String placeholderKey = dirPath + "/" + EMPTY_DIR_PLACEHOLDER;
+
+                if (!checkFileExists(placeholderKey)) {
+                    client.putObject(
+                        request -> request
+                            .bucket(properties.getBucketName())
+                            .key(placeholderKey)
+                            .contentType("application/octet-stream")
+                            .contentLength(0L)
+                            .build(),
+                        AsyncRequestBody.empty()
+                    ).join();
+
+                    placeholderCount++;
+                    log.debug("创建占位文件: {}", placeholderKey);
+                }
+            }
+
+            log.info("目录上传完成，共上传 {} 个文件, 创建 {} 个占位文件到: {}",
+                uploadCount, placeholderCount, targetPath);
+
+            return "上传成功，共 " + uploadCount + " 个文件";
+
+        } catch (Exception e) {
+            throw new OssException("上传目录失败:[" + e.getMessage() + "]");
+        } finally {
+            if (zis != null) {
+                try {
+                    zis.close();
+                } catch (IOException e) {
+                    log.error("关闭ZIP输入流失败", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * 解决路径冲突（处理文件和目录同名情况）
+     *
+     * @param basePath    基础路径
+     * @param originalPath 原始ZIP内路径
+     * @param pathMapping 路径映射缓存
+     * @return 解决冲突后的路径
+     */
+    private String resolvePathConflicts(String basePath, String originalPath, java.util.Map<String, String> pathMapping) {
+        String[] parts = originalPath.split("/");
+        StringBuilder resolvedPath = new StringBuilder();
+
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            boolean isFile = (i == parts.length - 1);
+
+            // 构建当前层级的原始路径（用于缓存查找）
+            String currentOriginalPath = String.join("/", java.util.Arrays.copyOfRange(parts, 0, i + 1));
+
+            // 检查缓存中是否已有映射
+            if (pathMapping.containsKey(currentOriginalPath)) {
+                String mappedName = pathMapping.get(currentOriginalPath);
+                if (!resolvedPath.isEmpty()) {
+                    resolvedPath.append("/");
+                }
+                // 只取映射路径的最后一段
+                String[] mappedParts = mappedName.split("/");
+                resolvedPath.append(mappedParts[mappedParts.length - 1]);
+                continue;
+            }
+
+            // 构建当前检查路径
+            String checkPath = basePath + (resolvedPath.isEmpty() ? "" : resolvedPath.toString() + "/") + part;
+
+            String finalName = part;
+
+            if (isFile) {
+                // 检查文件是否存在
+                if (checkFileExists(checkPath)) {
+                    finalName = renameWithSuffix(part, true);
+                    log.info("文件 {} 已存在，重命名为: {}", part, finalName);
+                }
+            } else {
+                // 检查目录是否存在
+                String dirCheckPath = checkPath + "/";
+                if (checkDirectoryHasContent(dirCheckPath)) {
+                    finalName = renameWithSuffix(part, false);
+                    log.info("目录 {} 已存在，重命名为: {}", part, finalName);
+                }
+            }
+
+            // 更新路径映射
+            if (!resolvedPath.isEmpty()) {
+                resolvedPath.append("/");
+            }
+            resolvedPath.append(finalName);
+            pathMapping.put(currentOriginalPath, resolvedPath.toString());
+        }
+
+        return resolvedPath.toString();
+    }
+
+    /**
+     * 检查目录下是否有内容
+     *
+     * @param dirPrefix 目录前缀（以/结尾）
+     * @return true-有内容, false-无内容
+     */
+    private boolean checkDirectoryHasContent(String dirPrefix) {
+        try {
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(dirPrefix)
+                .maxKeys(1)
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+            return !response.contents().isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 为文件或目录名添加随机后缀
+     *
+     * @param name   原始名称
+     * @param isFile 是否是文件
+     * @return 带随机后缀的名称
+     */
+    private String renameWithSuffix(String name, boolean isFile) {
+        String suffix = generateRandomSuffix();
+
+        if (isFile) {
+            int dotIndex = name.lastIndexOf('.');
+            if (dotIndex > 0) {
+                return name.substring(0, dotIndex) + "_" + suffix + name.substring(dotIndex);
+            }
+        }
+        return name + "_" + suffix;
+    }
+
+    /**
+     * 收集文件路径中的所有父目录
+     *
+     * @param filePath    完整文件路径
+     * @param directories 目录集合
+     */
+    private void collectAllParentDirectories(String filePath, java.util.Set<String> directories) {
+        int lastSlashIndex = filePath.lastIndexOf('/');
+        if (lastSlashIndex <= 0) {
+            return;
+        }
+
+        String dirPath = filePath.substring(0, lastSlashIndex);
+        String[] parts = dirPath.split("/");
+
+        StringBuilder currentPath = new StringBuilder();
+        for (String part : parts) {
+            if (!currentPath.isEmpty()) {
+                currentPath.append("/");
+            }
+            currentPath.append(part);
+            directories.add(currentPath.toString());
+        }
+    }
+
+    /**
+     * 检查文件是否存在
+     *
+     * @param key 文件键
+     * @return true-存在, false-不存在
+     */
+    private boolean checkFileExists(String key) {
+        try {
+            client.headObject(
+                builder -> builder
+                    .bucket(properties.getBucketName())
+                    .key(key)
+                    .build()
+            ).join();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 生成8位随机数字字符串
+     *
+     * @return 随机数字字符串
+     */
+    private String generateRandomSuffix() {
+        StringBuilder sb = new StringBuilder(8);
+        java.util.Random random = new java.util.Random();
+        for (int i = 0; i < 8; i++) {
+            sb.append(random.nextInt(10));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 根据文件名获取Content-Type
+     *
+     * @param fileName 文件名
+     * @return Content-Type
+     */
+    private String getContentTypeFromFileName(String fileName) {
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            String suffix = fileName.substring(lastDotIndex);
+            return FileUtils.getMimeType(suffix);
+        }
+        return "application/octet-stream";
+    }
+
+    /**
+     * 删除指定目录及其下的所有文件和子目录
+     *
+     * @param path 目录路径(例如: "/a/b/c" 或 "a/b/c" 或 "a/b/c/")
+     * @throws OssException 如果删除失败，抛出自定义异常
+     */
+    public void deleteDirectory(String path) {
+        try {
+            // 处理路径：去掉开头的"/"，确保结尾有"/"
+            String directoryPath = path;
+            if (directoryPath.startsWith("/")) {
+                directoryPath = directoryPath.substring(1);
+            }
+            if (!directoryPath.isEmpty() && !directoryPath.endsWith("/")) {
+                directoryPath = directoryPath + "/";
+            }
+
+            // 递归删除所有文件和子目录
+            int deletedCount = deleteAllFilesInDirectory(directoryPath);
+
+            log.info("目录删除成功: {}, 共删除 {} 个对象", path, deletedCount);
+
+        } catch (Exception e) {
+            throw new OssException("删除目录失败:[" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * 递归删除目录下的所有文件和子目录
+     *
+     * @param prefix 目录前缀
+     * @return 删除的对象数量
+     */
+    private int deleteAllFilesInDirectory(String prefix) {
+        int deletedCount = 0;
+
+        try {
+            // 列出当前目录下的所有对象
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(prefix)
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            // 删除所有文件（包括目录标记对象）
+            List<S3Object> contents = response.contents();
+            for (S3Object s3Object : contents) {
+                String key = s3Object.key();
+
+                // 删除对象
+                client.deleteObject(
+                    x -> x.bucket(properties.getBucketName())
+                        .key(key)
+                        .build()
+                ).join();
+
+                deletedCount++;
+                log.debug("已删除对象: {}", key);
+            }
+
+            // 如果还有更多对象（分页），继续删除
+            if (response.isTruncated()) {
+                String continuationToken = response.nextContinuationToken();
+                deletedCount += deleteRemainingFiles(prefix, continuationToken);
+            }
+
+        } catch (Exception e) {
+            throw new OssException("删除目录内容失败: " + e.getMessage());
+        }
+
+        return deletedCount;
+    }
+
+    /**
+     * 删除剩余的分页对象
+     *
+     * @param prefix            目录前缀
+     * @param continuationToken 分页token
+     * @return 删除的对象数量
+     */
+    private int deleteRemainingFiles(String prefix, String continuationToken) {
+        int deletedCount = 0;
+
+        try {
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(prefix)
+                .continuationToken(continuationToken)
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            // 删除当前批次的所有对象
+            List<S3Object> contents = response.contents();
+            for (S3Object s3Object : contents) {
+                String key = s3Object.key();
+
+                client.deleteObject(
+                    x -> x.bucket(properties.getBucketName())
+                        .key(key)
+                        .build()
+                ).join();
+
+                deletedCount++;
+                log.debug("已删除对象: {}", key);
+            }
+
+            // 如果还有更多对象，递归继续删除
+            if (response.isTruncated()) {
+                deletedCount += deleteRemainingFiles(prefix, response.nextContinuationToken());
+            }
+
+        } catch (Exception e) {
+            throw new OssException("删除分页对象失败: " + e.getMessage());
+        }
+
+        return deletedCount;
+    }
+
+    /**
+     * 移动文件或目录到目标目录（处理同名冲突）
+     *
+     * @param sourcePath 源路径(文件或目录)
+     * @param targetPath 目标目录路径
+     * @return 移动的文件数量
+     * @throws OssException 如果移动失败，抛出自定义异常
+     */
+    public int moveDirectory(String sourcePath, String targetPath) {
+        try {
+            // 规范化路径
+            String sourceNormalized = sourcePath;
+            if (sourceNormalized.startsWith("/")) {
+                sourceNormalized = sourceNormalized.substring(1);
+            }
+            if (sourceNormalized.endsWith("/")) {
+                sourceNormalized = sourceNormalized.substring(0, sourceNormalized.length() - 1);
+            }
+
+            String targetNormalized = normalizePath(targetPath);
+
+            // 检查目标目录是否存在
+            if (!directoryExists(targetPath)) {
+                throw new OssException("目标目录不存在: " + targetPath);
+            }
+
+            // 判断源是文件还是目录
+            boolean isSourceFile = checkFileExists(sourceNormalized);
+            boolean isSourceDir = !isSourceFile && directoryExists(sourcePath);
+
+            if (!isSourceFile && !isSourceDir) {
+                throw new OssException("源路径不存在: " + sourcePath);
+            }
+
+            int movedCount;
+
+            if (isSourceFile) {
+                // 移动单个文件
+                movedCount = moveSingleFile(sourceNormalized, targetNormalized);
+            } else {
+                // 移动整个目录
+                movedCount = moveEntireDirectory(sourceNormalized, targetNormalized);
+            }
+
+            log.info("移动成功，共移动 {} 个文件", movedCount);
+            return movedCount;
+
+        } catch (Exception e) {
+            if (e instanceof OssException) {
+                throw e;
+            }
+            throw new OssException("移动失败:[" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * 移动单个文件到目标目录
+     *
+     * @param sourceKey    源文件键
+     * @param targetPrefix 目标目录前缀
+     * @return 移动数量(1)
+     */
+    private int moveSingleFile(String sourceKey, String targetPrefix) {
+        // 提取文件名
+        String fileName = sourceKey.contains("/")
+            ? sourceKey.substring(sourceKey.lastIndexOf('/') + 1)
+            : sourceKey;
+
+        // 检查目标是否存在同名文件
+        String targetKey = targetPrefix + fileName;
+        if (checkFileExists(targetKey)) {
+            fileName = renameWithSuffix(fileName, true);
+            targetKey = targetPrefix + fileName;
+            log.info("目标存在同名文件，重命名为: {}", fileName);
+        }
+
+        // 服务端复制
+        copyObjectOnServer(sourceKey, targetKey);
+
+        // 删除源文件
+        client.deleteObject(
+            x -> x.bucket(properties.getBucketName())
+                .key(sourceKey)
+                .build()
+        ).join();
+
+        log.debug("文件移动成功: {} -> {}", sourceKey, targetKey);
+        return 1;
+    }
+
+    /**
+     * 移动整个目录到目标目录
+     *
+     * @param sourceDirPath 源目录路径(不带结尾/)
+     * @param targetPrefix  目标目录前缀(带结尾/)
+     * @return 移动的文件数量
+     */
+    private int moveEntireDirectory(String sourceDirPath, String targetPrefix) {
+        // 提取目录名
+        String dirName = sourceDirPath.contains("/")
+            ? sourceDirPath.substring(sourceDirPath.lastIndexOf('/') + 1)
+            : sourceDirPath;
+
+        // 检查目标是否存在同名目录
+        String targetDirPath = targetPrefix + dirName;
+        if (checkDirectoryHasContent(targetDirPath + "/")) {
+            dirName = renameWithSuffix(dirName, false);
+            targetDirPath = targetPrefix + dirName;
+            log.info("目标存在同名目录，重命名为: {}", dirName);
+        }
+
+        String sourcePrefix = sourceDirPath + "/";
+        String newTargetPrefix = targetDirPath + "/";
+
+        int movedCount = 0;
+
+        try {
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(sourcePrefix)
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            // 移动所有文件
+            for (S3Object s3Object : response.contents()) {
+                String sourceKey = s3Object.key();
+
+                // 计算相对路径
+                String relativePath = sourceKey.substring(sourcePrefix.length());
+                String targetKey = newTargetPrefix + relativePath;
+
+                // 服务端复制
+                copyObjectOnServer(sourceKey, targetKey);
+
+                // 删除源文件
+                final String keyToDelete = sourceKey;
+                client.deleteObject(
+                    x -> x.bucket(properties.getBucketName())
+                        .key(keyToDelete)
+                        .build()
+                ).join();
+
+                movedCount++;
+                log.debug("文件移动成功: {} -> {}", sourceKey, targetKey);
+            }
+
+            // 处理分页
+            if (response.isTruncated()) {
+                movedCount += moveRemainingFilesForDir(
+                    sourcePrefix, newTargetPrefix, response.nextContinuationToken()
+                );
+            }
+
+        } catch (Exception e) {
+            throw new OssException("移动目录内容失败: " + e.getMessage());
+        }
+
+        return movedCount;
+    }
+
+    /**
+     * 移动剩余的分页对象（目录移动用）
+     *
+     * @param sourcePrefix      源目录前缀
+     * @param targetPrefix      目标目录前缀
+     * @param continuationToken 分页token
+     * @return 移动的文件数量
+     */
+    private int moveRemainingFilesForDir(String sourcePrefix, String targetPrefix, String continuationToken) {
+        int movedCount = 0;
+
+        try {
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(sourcePrefix)
+                .continuationToken(continuationToken)
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            for (S3Object s3Object : response.contents()) {
+                String sourceKey = s3Object.key();
+                String relativePath = sourceKey.substring(sourcePrefix.length());
+                String targetKey = targetPrefix + relativePath;
+
+                copyObjectOnServer(sourceKey, targetKey);
+
+                final String keyToDelete = sourceKey;
+                client.deleteObject(
+                    x -> x.bucket(properties.getBucketName())
+                        .key(keyToDelete)
+                        .build()
+                ).join();
+
+                movedCount++;
+                log.debug("文件移动成功: {} -> {}", sourceKey, targetKey);
+            }
+
+            if (response.isTruncated()) {
+                movedCount += moveRemainingFilesForDir(sourcePrefix, targetPrefix, response.nextContinuationToken());
+            }
+
+        } catch (Exception e) {
+            throw new OssException("移动分页对象失败: " + e.getMessage());
+        }
+
+        return movedCount;
+    }
+
+    /**
+     * 规范化路径：去掉开头的"/"，确保结尾有"/"
+     *
+     * @param path 原始路径
+     * @return 规范化后的路径
+     */
+    private String normalizePath(String path) {
+        String normalized = path;
+        if (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (!normalized.isEmpty() && !normalized.endsWith("/")) {
+            normalized = normalized + "/";
+        }
+        return normalized;
+    }
+
+    /**
+     * 服务端复制对象（不经过客户端，性能最优）
+     *
+     * @param sourceKey 源对象键
+     * @param targetKey 目标对象键
+     * @throws OssException 如果复制失败
+     */
+    private void copyObjectOnServer(String sourceKey, String targetKey) {
+        try {
+            // 构建复制源（格式: bucket/key）
+            String copySource = properties.getBucketName() + "/" + sourceKey;
+
+            // 执行服务端复制
+            client.copyObject(
+                x -> x.sourceBucket(properties.getBucketName())
+                    .sourceKey(sourceKey)
+                    .destinationBucket(properties.getBucketName())
+                    .destinationKey(targetKey)
+                    .build()
+            ).join();
+
+        } catch (Exception e) {
+            throw new OssException("服务端复制对象失败: " + sourceKey + " -> " + targetKey +
+                                   ", 错误: " + e.getMessage());
+        }
     }
 
 }
