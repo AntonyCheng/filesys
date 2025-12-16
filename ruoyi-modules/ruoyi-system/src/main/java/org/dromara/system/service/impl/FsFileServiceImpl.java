@@ -4,6 +4,8 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
+import org.apache.commons.lang3.StringUtils;
+import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.oss.core.OssClient;
 import org.dromara.common.oss.factory.OssFactory;
 import org.dromara.common.satoken.utils.LoginHelper;
@@ -12,7 +14,9 @@ import org.dromara.system.domain.vo.SysDeptVo;
 import org.dromara.system.mapper.SysDeptMapper;
 import org.dromara.system.service.FsFileService;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.Objects;
 
 /**
@@ -26,12 +30,11 @@ public class FsFileServiceImpl implements FsFileService {
     @Resource
     private SysDeptMapper deptMapper;
 
-    private final OssClient storage = OssFactory.instance();
-
     @Override
     public JSONObject selectUserFileList(String path) {
         String userPath = getBaseUserPath();
-        JSONObject realRes = storage.listDirectory(userPath + "/" + path);
+        String targetPath = userPath + "/" + path;
+        JSONObject realRes = OssFactory.instance().listDirectory(targetPath);
         JSONObject res = new JSONObject();
         String parentKey = realRes.getString("parentKey");
         String currentKey = realRes.getString("currentKey");
@@ -54,9 +57,31 @@ public class FsFileServiceImpl implements FsFileService {
     }
 
     @Override
+    public void uploadUserFileSingle(MultipartFile file, String path) {
+        String userPath = getBaseUserPath();
+        String originalFileName = StringUtils.isEmpty(file.getOriginalFilename()) ? file.getName() : file.getOriginalFilename();
+        try {
+            String targetPath = userPath + "/" + path + (StringUtils.isEmpty(path) ? "" : "/") + originalFileName;
+            OssFactory.instance().uploadSingleFile(file.getInputStream(), targetPath, file.getSize(), file.getContentType());
+        } catch (IOException e) {
+            throw new ServiceException("文件流获取失败");
+        }
+    }
+
+    @Override
+    public void uploadUserFileMultiple(MultipartFile file, String path) {
+        String userPath = getBaseUserPath();
+        try {
+            OssFactory.instance().uploadDirectoryFromZip(userPath + "/" + path, file.getInputStream());
+        } catch (IOException e) {
+            throw new ServiceException("文件流获取失败");
+        }
+    }
+
+    @Override
     public JSONObject selectDeptFileList(String path) {
         String deptPath = getBaseDeptPath();
-        JSONObject realRes = storage.listDirectory(deptPath + "/" + path);
+        JSONObject realRes = OssFactory.instance().listDirectory(deptPath + "/" + path);
         JSONObject res = new JSONObject();
         String parentKey = realRes.getString("parentKey");
         String currentKey = realRes.getString("currentKey");
@@ -79,7 +104,8 @@ public class FsFileServiceImpl implements FsFileService {
     }
 
     private String getBaseUserPath() {
-        String res = getBaseDeptPath() + "/" + LoginHelper.getUsername();
+        String res = getBaseDeptPath() + "/" + "user_" + LoginHelper.getUsername();
+        OssClient storage = OssFactory.instance();
         if (!storage.directoryExists(res)) {
             storage.createDirectory(res);
         }
@@ -108,6 +134,7 @@ public class FsFileServiceImpl implements FsFileService {
             baseUri.append("/").append(currentDept.getDeptCategory());
         }
         String res = baseUri.toString();
+        OssClient storage = OssFactory.instance();
         if (!storage.directoryExists(res)) {
             storage.createDirectory(res);
         }

@@ -1159,9 +1159,11 @@ public class OssClient {
 
     /**
      * 上传单个文件(InputStream方式)到指定路径
+     * 重写版本：不依赖现有upload方法，直接使用S3AsyncClient
      */
-    public UploadResult uploadSingleFile(InputStream inputStream, String targetPath, Long length, String contentType) {
+    public void uploadSingleFile(InputStream inputStream, String targetPath, Long length, String contentType) {
         try {
+            // 规范化路径
             String normalizedPath = normalizeFilePath(targetPath);
 
             // 检查目标路径是否已存在同名文件
@@ -1170,15 +1172,60 @@ public class OssClient {
                 log.info("目标路径已存在同名文件，自动重命名为: {}", normalizedPath);
             }
 
-            UploadResult result = upload(inputStream, normalizedPath, length, contentType);
-            log.info("文件上传成功: {}", normalizedPath);
-            return result;
+            // 将输入流转换为字节数组（确保可重复读取）
+            byte[] fileBytes;
+            if (inputStream instanceof ByteArrayInputStream) {
+                fileBytes = IoUtil.readBytes(inputStream);
+            } else {
+                fileBytes = IoUtil.readBytes(inputStream);
+            }
+
+            // 计算实际长度
+            long actualLength = (length != null && length > 0) ? length : fileBytes.length;
+
+            // 创建异步请求体
+            BlockingInputStreamAsyncRequestBody requestBody = BlockingInputStreamAsyncRequestBody.builder()
+                .contentLength(actualLength)
+                .subscribeTimeout(Duration.ofSeconds(120))
+                .build();
+
+            // 构建PutObject请求
+            PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(properties.getBucketName())
+                .key(normalizedPath)
+                .contentType(contentType != null ? contentType : "application/octet-stream")
+                .contentLength(actualLength)
+                .build();
+
+            // 执行异步上传
+            var putObjectFuture = client.putObject(putRequest, requestBody);
+
+            // 异步写入数据
+            requestBody.writeInputStream(new ByteArrayInputStream(fileBytes));
+
+            // 等待上传完成并获取响应
+            PutObjectResponse response = putObjectFuture.join();
+
+            // 获取ETag
+            String eTag = response.eTag().replace("\"", "");
+
+            log.info("文件上传成功: {}, ETag: {}", normalizedPath, eTag);
 
         } catch (Exception e) {
+            log.error("上传文件失败: {}", targetPath, e);
             if (e instanceof OssException) {
                 throw e;
             }
             throw new OssException("上传文件失败:[" + e.getMessage() + "]");
+        } finally {
+            // 关闭输入流
+            try {
+                if (inputStream != null) {
+                    inputStream.close();
+                }
+            } catch (IOException e) {
+                log.warn("关闭输入流失败", e);
+            }
         }
     }
 
@@ -1243,7 +1290,7 @@ public class OssClient {
                 "folders", listObjectsV2Response.commonPrefixes().stream()
                     .map(commonPrefix -> JSONObject.of(
                         "key", "/" + commonPrefix.prefix(),
-                        "name",("/" + commonPrefix.prefix()).replaceAll("/+$", "").replaceAll(".*/", "")
+                        "name", ("/" + commonPrefix.prefix()).replaceAll("/+$", "").replaceAll(".*/", "")
                     ))
                     .toList(),
                 "files", listObjectsV2Response.contents().stream()
@@ -1252,7 +1299,7 @@ public class OssClient {
                     .filter(s3Object -> !s3Object.key().equals(currentPrefix))
                     .map(s3Object -> JSONObject.of(
                         "key", "/" + s3Object.key(),
-                        "name",("/" + s3Object.key()).replaceAll("/+$", "").replaceAll(".*/", ""),
+                        "name", ("/" + s3Object.key()).replaceAll("/+$", "").replaceAll(".*/", ""),
                         "lastModified", s3Object.lastModified()
                             .atZone(ZoneId.of("Asia/Shanghai"))
                             .truncatedTo(ChronoUnit.SECONDS)
