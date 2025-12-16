@@ -10,6 +10,8 @@ import com.alibaba.fastjson2.JSONObject;
  */
 public interface FsFileService {
 
-    JSONObject selectPageFileList();
+    JSONObject selectUserFileList(String path);
+
+    JSONObject selectDeptFileList(String path);
 
 }
