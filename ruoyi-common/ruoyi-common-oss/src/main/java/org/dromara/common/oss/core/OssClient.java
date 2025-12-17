@@ -1009,54 +1009,6 @@ public class OssClient {
     }
 
     /**
-     * 递归删除目录下的所有文件和子目录
-     */
-    private int deleteAllFilesInDirectory(String prefix) {
-        int deletedCount = 0;
-
-        try {
-            ListObjectsV2Request request = ListObjectsV2Request.builder()
-                .bucket(properties.getBucketName())
-                .prefix(prefix)
-                .build();
-
-            ListObjectsV2Response response = client.listObjectsV2(request).join();
-
-            List<S3Object> contents = response.contents();
-            for (S3Object s3Object : contents) {
-                String key = s3Object.key();
-
-                client.deleteObject(
-                    x -> x.bucket(properties.getBucketName())
-                        .key(key)
-                        .build()
-                ).join();
-
-                deletedCount++;
-                log.debug("已删除对象: {}", key);
-            }
-
-            if (response.isTruncated()) {
-                deletedCount += processPaginatedObjects(prefix, response.nextContinuationToken(),
-                    (s3Object, count) -> {
-                        String key = s3Object.key();
-                        client.deleteObject(
-                            x -> x.bucket(properties.getBucketName())
-                                .key(key)
-                                .build()
-                        ).join();
-                        log.debug("已删除对象: {}", key);
-                    });
-            }
-
-        } catch (Exception e) {
-            throw new OssException("删除目录内容失败: " + e.getMessage());
-        }
-
-        return deletedCount;
-    }
-
-    /**
      * 移动单个文件到目标目录
      */
     private int moveSingleFile(String sourceKey, String targetPrefix) {
@@ -1154,6 +1106,471 @@ public class OssClient {
         return movedCount;
     }
 
+    /**
+     * 下载文件到输出流(辅助方法)
+     *
+     * @param normalizedFilePath 规范化后的文件路径
+     * @param outputStream       输出流
+     * @throws IOException 如果IO操作失败
+     */
+    private void downloadFileToStream(String normalizedFilePath, OutputStream outputStream) throws IOException {
+        // 构建下载请求
+        DownloadRequest<ResponsePublisher<GetObjectResponse>> downloadRequest = DownloadRequest.builder()
+            .getObjectRequest(y -> y.bucket(properties.getBucketName())
+                .key(normalizedFilePath)
+                .build())
+            .addTransferListener(LoggingTransferListener.create())
+            .responseTransformer(AsyncResponseTransformer.toPublisher())
+            .build();
+
+        // 使用 S3TransferManager 下载文件
+        Download<ResponsePublisher<GetObjectResponse>> download = transferManager.download(downloadRequest);
+
+        // 获取下载发布订阅转换器
+        ResponsePublisher<GetObjectResponse> publisher = download.completionFuture().join().result();
+
+        // 创建可写入的字节通道
+        try (WritableByteChannel channel = Channels.newChannel(outputStream)) {
+            // 订阅数据并写入输出流
+            publisher.subscribe(byteBuffer -> {
+                while (byteBuffer.hasRemaining()) {
+                    try {
+                        channel.write(byteBuffer);
+                    } catch (IOException e) {
+                        throw new RuntimeException("写入数据失败: " + e.getMessage(), e);
+                    }
+                }
+            }).join();
+        }
+    }
+
+    /**
+     * 下载目录并打包成ZIP到输出流(辅助方法)
+     *
+     * @param directoryPath 目录路径
+     * @param outputStream  输出流
+     * @throws IOException 如果IO操作失败
+     */
+    private void downloadDirectoryAsZipInternal(String directoryPath, OutputStream outputStream) throws IOException {
+        ZipOutputStream zipOut = null;
+        try {
+            String prefix = normalizeDirectoryPath(directoryPath);
+            String topLevelDirName = extractTopLevelDirName(directoryPath);
+
+            zipOut = new ZipOutputStream(outputStream);
+            listAllFiles(prefix, zipOut, prefix, topLevelDirName);
+            zipOut.finish();
+
+        } finally {
+            if (zipOut != null) {
+                try {
+                    zipOut.close();
+                } catch (IOException e) {
+                    log.error("关闭ZIP输出流失败", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * 将目录下的所有文件添加到ZIP中,保持相对路径结构(辅助方法,排除占位文件)
+     *
+     * @param currentPrefix   当前遍历的目录前缀
+     * @param basePrefix      基础前缀(用于计算相对路径)
+     * @param zipBasePath     ZIP中的基础路径
+     * @param zipOut          ZIP输出流
+     * @param addedZipEntries 已添加的ZIP条目集合(用于去重)
+     * @return 添加的文件数量
+     * @throws IOException 如果IO操作失败
+     */
+    private int addDirectoryFilesToZipWithBasePath(String currentPrefix, String basePrefix,
+                                                   String zipBasePath, ZipOutputStream zipOut,
+                                                   java.util.Set<String> addedZipEntries) throws IOException {
+        int fileCount = 0;
+
+        try {
+            // 构建列表请求
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(properties.getBucketName())
+                .prefix(currentPrefix)
+                .delimiter("/")
+                .build();
+
+            ListObjectsV2Response response = client.listObjectsV2(request).join();
+
+            // 处理当前目录下的文件
+            List<S3Object> contents = response.contents();
+            for (S3Object s3Object : contents) {
+                String key = s3Object.key();
+
+                // 跳过目录标记对象
+                if (key.endsWith("/")) {
+                    continue;
+                }
+
+                // 跳过占位文件
+                if (key.endsWith("/" + EMPTY_DIR_PLACEHOLDER)) {
+                    log.debug("跳过占位文件: {}", key);
+                    continue;
+                }
+
+                // 计算相对于basePrefix的相对路径
+                String relativePath = key.substring(basePrefix.length());
+                if (relativePath.isEmpty()) {
+                    continue;
+                }
+
+                // 去掉开头的斜杠
+                if (relativePath.startsWith("/")) {
+                    relativePath = relativePath.substring(1);
+                }
+
+                // 构建ZIP中的完整路径：zipBasePath + 相对路径
+                String zipEntryName = zipBasePath + "/" + relativePath;
+
+                // 检查是否已添加
+                if (!addedZipEntries.contains(zipEntryName)) {
+                    addSingleFileToZip(key, zipEntryName, zipOut);
+                    addedZipEntries.add(zipEntryName);
+                    fileCount++;
+                    log.debug("已添加文件到ZIP: {}", zipEntryName);
+                } else {
+                    log.warn("ZIP条目已存在，跳过: {}", zipEntryName);
+                }
+            }
+
+            // 递归处理子目录
+            List<String> commonPrefixes = response.commonPrefixes().stream()
+                .map(CommonPrefix::prefix)
+                .toList();
+
+            for (String subPrefix : commonPrefixes) {
+                // 递归时保持basePrefix和zipBasePath不变
+                fileCount += addDirectoryFilesToZipWithBasePath(subPrefix, basePrefix, zipBasePath, zipOut, addedZipEntries);
+            }
+
+        } catch (Exception e) {
+            throw new IOException("添加目录文件到ZIP失败: " + e.getMessage(), e);
+        }
+
+        return fileCount;
+    }
+
+    /**
+     * 从文件路径中提取文件名(辅助方法)
+     *
+     * @param filePath 文件路径
+     * @return 文件名
+     */
+    private String extractFileName(String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            return "unnamed";
+        }
+
+        // 去掉结尾的斜杠
+        String path = filePath;
+        while (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        // 获取最后一个斜杠后的内容
+        int lastSlashIndex = path.lastIndexOf('/');
+        if (lastSlashIndex >= 0) {
+            return path.substring(lastSlashIndex + 1);
+        }
+
+        return path;
+    }
+
+    /**
+     * 生成ZIP中的唯一文件名(处理同名冲突)(辅助方法)
+     *
+     * @param originalName 原始文件名
+     * @param nameCountMap 名称计数Map
+     * @return 唯一的文件名
+     */
+    private String generateUniqueNameInZip(String originalName, java.util.Map<String, Integer> nameCountMap) {
+        if (!nameCountMap.containsKey(originalName)) {
+            nameCountMap.put(originalName, 1);
+            return originalName;
+        }
+
+        // 存在同名,添加序号
+        int count = nameCountMap.get(originalName);
+        nameCountMap.put(originalName, count + 1);
+
+        // 处理文件扩展名
+        int lastDotIndex = originalName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            String nameWithoutExt = originalName.substring(0, lastDotIndex);
+            String extension = originalName.substring(lastDotIndex);
+            return nameWithoutExt + "_(" + count + ")" + extension;
+        } else {
+            return originalName + "_(" + count + ")";
+        }
+    }
+
+    /**
+     * 将单个文件添加到ZIP中(辅助方法)
+     *
+     * @param objectKey    S3对象键
+     * @param zipEntryName ZIP中的条目名称
+     * @param zipOut       ZIP输出流
+     * @throws IOException 如果IO操作失败
+     */
+    private void addSingleFileToZip(String objectKey, String zipEntryName, ZipOutputStream zipOut) throws IOException {
+        try {
+            // 创建ZIP条目
+            ZipEntry zipEntry = new ZipEntry(zipEntryName);
+            zipOut.putNextEntry(zipEntry);
+
+            // 下载文件内容
+            DownloadRequest<ResponsePublisher<GetObjectResponse>> downloadRequest = DownloadRequest.builder()
+                .getObjectRequest(y -> y.bucket(properties.getBucketName())
+                    .key(objectKey)
+                    .build())
+                .responseTransformer(AsyncResponseTransformer.toPublisher())
+                .build();
+
+            Download<ResponsePublisher<GetObjectResponse>> download = transferManager.download(downloadRequest);
+            ResponsePublisher<GetObjectResponse> publisher = download.completionFuture().join().result();
+
+            // 使用临时缓冲区写入ZIP
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            WritableByteChannel channel = Channels.newChannel(buffer);
+
+            publisher.subscribe(byteBuffer -> {
+                while (byteBuffer.hasRemaining()) {
+                    try {
+                        channel.write(byteBuffer);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }).join();
+
+            channel.close();
+
+            // 将缓冲区内容写入ZIP
+            buffer.writeTo(zipOut);
+            zipOut.closeEntry();
+
+        } catch (Exception e) {
+            throw new IOException("添加文件到ZIP失败: " + objectKey, e);
+        }
+    }
+
+    /**
+     * 删除指定前缀下的所有对象(辅助方法)
+     *
+     * @param prefix 目录前缀
+     * @return 删除的对象数量
+     */
+    private int deleteAllObjectsUnderPrefix(String prefix) {
+        int deletedCount = 0;
+        String continuationToken = null;
+
+        try {
+            do {
+                // 构建列表请求
+                ListObjectsV2Request.Builder requestBuilder = ListObjectsV2Request.builder()
+                    .bucket(properties.getBucketName())
+                    .prefix(prefix)
+                    .maxKeys(1000); // 每批最多1000个
+
+                if (continuationToken != null) {
+                    requestBuilder.continuationToken(continuationToken);
+                }
+
+                ListObjectsV2Response response = client.listObjectsV2(requestBuilder.build()).join();
+
+                List<S3Object> contents = response.contents();
+
+                if (!contents.isEmpty()) {
+                    // 批量删除当前批次的对象
+                    List<ObjectIdentifier> objectsToDelete = contents.stream()
+                        .map(s3Object -> ObjectIdentifier.builder()
+                            .key(s3Object.key())
+                            .build())
+                        .toList();
+
+                    DeleteObjectsRequest deleteRequest = DeleteObjectsRequest.builder()
+                        .bucket(properties.getBucketName())
+                        .delete(Delete.builder()
+                            .objects(objectsToDelete)
+                            .quiet(true) // 静默模式,不返回成功删除的对象列表
+                            .build())
+                        .build();
+
+                    DeleteObjectsResponse deleteResponse = client.deleteObjects(deleteRequest).join();
+
+                    int batchDeletedCount = objectsToDelete.size() - deleteResponse.errors().size();
+                    deletedCount += batchDeletedCount;
+
+                    // 记录删除错误
+                    if (!deleteResponse.errors().isEmpty()) {
+                        for (S3Error error : deleteResponse.errors()) {
+                            log.error("删除对象失败: {}, 错误: {}", error.key(), error.message());
+                        }
+                    }
+
+                    log.debug("批次删除完成,本批删除 {} 个对象", batchDeletedCount);
+                }
+
+                // 检查是否还有更多对象
+                if (response.isTruncated()) {
+                    continuationToken = response.nextContinuationToken();
+                } else {
+                    continuationToken = null;
+                }
+
+            } while (continuationToken != null);
+
+        } catch (Exception e) {
+            throw new OssException("删除目录内容失败: " + e.getMessage());
+        }
+
+        return deletedCount;
+    }
+
+    /**
+     * 批量删除多个文件(辅助方法)
+     * 使用S3的批量删除API,最多每批1000个
+     *
+     * @param fileKeys 文件key列表
+     * @return 删除的文件数量
+     */
+    private int batchDeleteFiles(List<String> fileKeys) {
+        if (fileKeys == null || fileKeys.isEmpty()) {
+            return 0;
+        }
+
+        int totalDeleted = 0;
+
+        try {
+            // 分批删除,每批最多1000个(S3限制)
+            int batchSize = 1000;
+            for (int i = 0; i < fileKeys.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, fileKeys.size());
+                List<String> batch = fileKeys.subList(i, end);
+
+                // 构建批量删除请求
+                List<ObjectIdentifier> objectsToDelete = batch.stream()
+                    .map(key -> ObjectIdentifier.builder()
+                        .key(key)
+                        .build())
+                    .toList();
+
+                DeleteObjectsRequest deleteRequest = DeleteObjectsRequest.builder()
+                    .bucket(properties.getBucketName())
+                    .delete(Delete.builder()
+                        .objects(objectsToDelete)
+                        .quiet(true) // 静默模式
+                        .build())
+                    .build();
+
+                DeleteObjectsResponse deleteResponse = client.deleteObjects(deleteRequest).join();
+
+                int batchDeletedCount = objectsToDelete.size() - deleteResponse.errors().size();
+                totalDeleted += batchDeletedCount;
+
+                // 记录删除错误
+                if (!deleteResponse.errors().isEmpty()) {
+                    for (S3Error error : deleteResponse.errors()) {
+                        log.error("删除文件失败: {}, 错误: {}", error.key(), error.message());
+                    }
+                }
+
+                log.debug("批次删除文件完成,本批删除 {} 个文件", batchDeletedCount);
+            }
+
+        } catch (Exception e) {
+            throw new OssException("批量删除文件失败: " + e.getMessage());
+        }
+
+        return totalDeleted;
+    }
+
+    /**
+     * 规范化路径用于比较(辅助方法)
+     * 统一处理路径格式,便于后续去重比较
+     *
+     * @param path 原始路径
+     * @return 规范化后的路径
+     */
+    private String normalizePathForComparison(String path) {
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+
+        String normalized = path.trim();
+
+        // 去掉开头的所有"/"
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+
+        // 去掉结尾的所有"/"
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        return normalized;
+    }
+
+    /**
+     * 智能过滤冗余路径(辅助方法)
+     * 移除被父路径包含的子路径,避免重复删除
+     *
+     * @param paths 规范化后的路径列表
+     * @return 过滤后的路径列表
+     */
+    private List<String> filterRedundantPaths(List<String> paths) {
+        if (paths == null || paths.size() <= 1) {
+            return paths;
+        }
+
+        // 按路径长度排序,短路径在前(父路径通常更短)
+        List<String> sortedPaths = new java.util.ArrayList<>(paths);
+        sortedPaths.sort(java.util.Comparator.comparingInt(String::length));
+
+        List<String> result = new java.util.ArrayList<>();
+
+        for (String currentPath : sortedPaths) {
+            boolean isRedundant = false;
+
+            // 检查当前路径是否被已添加的任何路径包含
+            for (String existingPath : result) {
+                if (isPathContainedBy(currentPath, existingPath)) {
+                    isRedundant = true;
+                    log.debug("路径 [{}] 被父路径 [{}] 包含,已过滤", currentPath, existingPath);
+                    break;
+                }
+            }
+
+            if (!isRedundant) {
+                result.add(currentPath);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 判断路径A是否被路径B包含(辅助方法)
+     *
+     * @param pathA 待检查的路径
+     * @param pathB 父路径候选
+     * @return true-pathA被pathB包含, false-不包含
+     */
+    private boolean isPathContainedBy(String pathA, String pathB) {
+        if (pathA.equals(pathB)) {
+            return false; // 相同路径不算包含
+        }
+
+        // pathB必须是pathA的前缀,且后面紧跟"/"或pathA刚好等于pathB
+        return pathA.startsWith(pathB + "/") || pathA.equals(pathB);
+    }
 
     // ==================== 业务方法 ====================
 
@@ -1225,6 +1642,83 @@ public class OssClient {
                 }
             } catch (IOException e) {
                 log.warn("关闭输入流失败", e);
+            }
+        }
+    }
+
+    /**
+     * 上传ZIP文件流并解压到指定目录（自动处理同名文件和目录冲突）
+     */
+    public String uploadMultipleFile(String targetPath, InputStream zipInputStream) {
+        ZipInputStream zis = null;
+        java.util.Set<String> directories = new java.util.HashSet<>();
+
+        try {
+            String basePath = normalizeDirectoryPath(targetPath);
+
+            zis = new ZipInputStream(zipInputStream);
+            ZipEntry entry;
+
+            java.util.Map<String, byte[]> allEntries = new java.util.LinkedHashMap<>();
+
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    zis.closeEntry();
+                    continue;
+                }
+
+                String fileName = entry.getName();
+                if (fileName.contains("__MACOSX") || fileName.startsWith("._")) {
+                    zis.closeEntry();
+                    continue;
+                }
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
+
+                allEntries.put(fileName, baos.toByteArray());
+                zis.closeEntry();
+            }
+
+            java.util.Map<String, String> pathMapping = new java.util.HashMap<>();
+
+            int uploadCount = 0;
+            for (java.util.Map.Entry<String, byte[]> entryData : allEntries.entrySet()) {
+                String originalPath = entryData.getKey();
+                byte[] fileData = entryData.getValue();
+
+                String resolvedPath = resolvePathConflicts(basePath, originalPath, pathMapping);
+                String objectKey = basePath + resolvedPath;
+
+                collectAllParentDirectories(objectKey, directories);
+
+                String contentType = getContentTypeFromFileName(originalPath);
+                upload(new ByteArrayInputStream(fileData), objectKey, (long) fileData.length, contentType);
+
+                uploadCount++;
+                log.debug("文件上传成功: {}", objectKey);
+            }
+
+            int placeholderCount = createPlaceholdersForDirectories(directories);
+
+            log.info("目录上传完成，共上传 {} 个文件, 创建 {} 个占位文件到: {}",
+                uploadCount, placeholderCount, targetPath);
+
+            return "上传成功，共 " + uploadCount + " 个文件";
+
+        } catch (Exception e) {
+            throw new OssException("上传目录失败:[" + e.getMessage() + "]");
+        } finally {
+            if (zis != null) {
+                try {
+                    zis.close();
+                } catch (IOException e) {
+                    log.error("关闭ZIP输入流失败", e);
+                }
             }
         }
     }
@@ -1318,7 +1812,7 @@ public class OssClient {
     /**
      * 判断指定目录是否存在
      */
-    public boolean directoryExists(String path) {
+    public boolean existsDirectory(String path) {
         try {
             String directoryPath = normalizeDirectoryPath(path);
 
@@ -1340,21 +1834,122 @@ public class OssClient {
     }
 
     /**
-     * 下载指定目录下的所有文件并打包成ZIP（保留顶层目录，排除占位文件）
+     * 下载单个文件或目录到输出流(目录会自动打包成ZIP)
+     *
+     * @param path         文件或目录路径
+     * @param outputStream 输出流
+     * @throws OssException 如果下载失败
      */
-    public void downloadDirectoryAsZip(String directoryPath, OutputStream outputStream) {
+    public void downloadSingleFile(String path, OutputStream outputStream) {
+        try {
+            // 先尝试作为文件处理
+            String normalizedFilePath = normalizeFilePath(path);
+
+            // 检查是否是文件
+            if (checkFileExists(normalizedFilePath)) {
+                // 是文件,直接下载
+                downloadFileToStream(normalizedFilePath, outputStream);
+                log.info("文件下载成功: {}", path);
+                return;
+            }
+
+            // 不是文件,检查是否是目录
+            if (existsDirectory(path)) {
+                // 是目录,打包成ZIP下载
+                downloadDirectoryAsZipInternal(path, outputStream);
+                log.info("目录打包下载成功: {}", path);
+                return;
+            }
+
+            // 既不是文件也不是目录
+            throw new OssException("路径不存在: " + path);
+
+        } catch (Exception e) {
+            log.error("下载失败: {}", path, e);
+            throw new OssException("下载失败:[" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * 批量下载多个文件和目录,打包成ZIP输出(智能去重,保持相对目录结构)
+     *
+     * @param paths        文件或目录路径列表
+     * @param outputStream 输出流
+     * @throws OssException 如果下载失败
+     */
+    public void downloadMultipleFile(List<String> paths, OutputStream outputStream) {
+        if (paths == null || paths.isEmpty()) {
+            throw new OssException("路径列表不能为空");
+        }
+
         ZipOutputStream zipOut = null;
         try {
-            String prefix = normalizeDirectoryPath(directoryPath);
-            String topLevelDirName = extractTopLevelDirName(directoryPath);
+            // 第一步: 规范化所有路径并去除完全重复的路径
+            java.util.Set<String> normalizedPathSet = new java.util.LinkedHashSet<>();
+            for (String path : paths) {
+                String normalized = normalizePathForComparison(path);
+                if (!normalized.isEmpty()) {
+                    normalizedPathSet.add(normalized);
+                }
+            }
+
+            // 第二步: 智能过滤,移除被父路径包含的子路径
+            List<String> filteredPaths = filterRedundantPaths(new java.util.ArrayList<>(normalizedPathSet));
+
+            log.info("原始路径数: {}, 去重后路径数: {}", paths.size(), filteredPaths.size());
 
             zipOut = new ZipOutputStream(outputStream);
-            listAllFiles(prefix, zipOut, prefix, topLevelDirName);
-            zipOut.finish();
 
-            log.info("目录打包下载成功: {}", directoryPath);
+            // 用于跟踪已添加的ZIP条目,防止重复
+            java.util.Set<String> addedZipEntries = new java.util.HashSet<>();
+
+            // 用于处理同名文件/目录冲突
+            java.util.Map<String, Integer> nameCountMap = new java.util.HashMap<>();
+
+            int totalCount = 0;
+
+            for (String path : filteredPaths) {
+                // 规范化路径
+                String normalizedPath = normalizePathForComparison(path);
+
+                // 检查是文件还是目录
+                if (checkFileExists(normalizedPath)) {
+                    // 是文件,提取文件名作为ZIP中的顶层文件名
+                    String fileName = extractFileName(normalizedPath);
+                    String uniqueFileName = generateUniqueNameInZip(fileName, nameCountMap);
+
+                    if (!addedZipEntries.contains(uniqueFileName)) {
+                        addSingleFileToZip(normalizedPath, uniqueFileName, zipOut);
+                        addedZipEntries.add(uniqueFileName);
+                        totalCount++;
+                        log.debug("已添加文件到ZIP: {}", uniqueFileName);
+                    } else {
+                        log.warn("ZIP条目已存在，跳过: {}", uniqueFileName);
+                    }
+
+                } else if (existsDirectory(path)) {
+                    // 是目录,提取目录名作为ZIP中的顶层目录
+                    String dirName = extractTopLevelDirName(path);
+                    String uniqueDirName = generateUniqueNameInZip(dirName, nameCountMap);
+
+                    String prefix = normalizeDirectoryPath(path);
+
+                    // 关键：传入目录的prefix和uniqueDirName作为ZIP基础路径
+                    int fileCount = addDirectoryFilesToZipWithBasePath(prefix, prefix, uniqueDirName, zipOut, addedZipEntries);
+                    totalCount += fileCount;
+                    log.debug("已添加目录到ZIP: {}, 包含 {} 个文件", uniqueDirName, fileCount);
+
+                } else {
+                    log.warn("路径不存在,跳过: {}", path);
+                }
+            }
+
+            zipOut.finish();
+            log.info("批量下载完成,共打包 {} 个文件", totalCount);
+
         } catch (Exception e) {
-            throw new OssException("下载目录并打包失败:[" + e.getMessage() + "]");
+            log.error("批量下载失败", e);
+            throw new OssException("批量下载失败:[" + e.getMessage() + "]");
         } finally {
             if (zipOut != null) {
                 try {
@@ -1367,158 +1962,122 @@ public class OssClient {
     }
 
     /**
-     * 上传ZIP文件流并解压到指定目录（自动处理同名文件和目录冲突）
+     * 删除单个文件或目录
+     *
+     * @param path 文件或目录路径
+     * @throws OssException 如果删除失败
      */
-    public String uploadDirectoryFromZip(String targetPath, InputStream zipInputStream) {
-        ZipInputStream zis = null;
-        java.util.Set<String> directories = new java.util.HashSet<>();
-
+    public void deleteSingleFile(String path) {
         try {
-            String basePath = normalizeDirectoryPath(targetPath);
+            String normalizedPath = normalizePathForComparison(path);
 
-            zis = new ZipInputStream(zipInputStream);
-            ZipEntry entry;
-
-            java.util.Map<String, byte[]> allEntries = new java.util.LinkedHashMap<>();
-
-            while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                String fileName = entry.getName();
-                if (fileName.contains("__MACOSX") || fileName.startsWith("._")) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = zis.read(buffer)) > 0) {
-                    baos.write(buffer, 0, len);
-                }
-
-                allEntries.put(fileName, baos.toByteArray());
-                zis.closeEntry();
+            if (normalizedPath.isEmpty()) {
+                throw new OssException("路径不能为空");
             }
 
-            java.util.Map<String, String> pathMapping = new java.util.HashMap<>();
+            // 检查是文件还是目录
+            boolean isFile = checkFileExists(normalizedPath);
+            boolean isDirectory = !isFile && existsDirectory(path);
 
-            int uploadCount = 0;
-            for (java.util.Map.Entry<String, byte[]> entryData : allEntries.entrySet()) {
-                String originalPath = entryData.getKey();
-                byte[] fileData = entryData.getValue();
-
-                String resolvedPath = resolvePathConflicts(basePath, originalPath, pathMapping);
-                String objectKey = basePath + resolvedPath;
-
-                collectAllParentDirectories(objectKey, directories);
-
-                String contentType = getContentTypeFromFileName(originalPath);
-                upload(new ByteArrayInputStream(fileData), objectKey, (long) fileData.length, contentType);
-
-                uploadCount++;
-                log.debug("文件上传成功: {}", objectKey);
+            if (!isFile && !isDirectory) {
+                throw new OssException("路径不存在: " + path);
             }
 
-            int placeholderCount = createPlaceholdersForDirectories(directories);
-
-            log.info("目录上传完成，共上传 {} 个文件, 创建 {} 个占位文件到: {}",
-                uploadCount, placeholderCount, targetPath);
-
-            return "上传成功，共 " + uploadCount + " 个文件";
-
-        } catch (Exception e) {
-            throw new OssException("上传目录失败:[" + e.getMessage() + "]");
-        } finally {
-            if (zis != null) {
-                try {
-                    zis.close();
-                } catch (IOException e) {
-                    log.error("关闭ZIP输入流失败", e);
-                }
-            }
-        }
-    }
-
-    /**
-     * 删除单个文件
-     */
-    public void deleteSingleFile(String filePath) {
-        try {
-            String normalizedPath = normalizeFilePath(filePath);
-
-            if (!checkFileExists(normalizedPath)) {
-                throw new OssException("文件不存在: " + filePath);
-            }
-
-            client.deleteObject(
-                x -> x.bucket(properties.getBucketName())
-                    .key(normalizedPath)
-                    .build()
-            ).join();
-
-            log.info("文件删除成功: {}", filePath);
-
-        } catch (Exception e) {
-            if (e instanceof OssException) {
-                throw e;
-            }
-            throw new OssException("删除文件失败:[" + e.getMessage() + "]");
-        }
-    }
-
-    /**
-     * 批量删除多个文件
-     */
-    public void deleteMultipleFiles(List<String> filePaths) {
-        if (filePaths == null || filePaths.isEmpty()) {
-            throw new OssException("文件路径列表不能为空");
-        }
-
-        java.util.List<String> normalizedPaths = new java.util.ArrayList<>();
-        for (String filePath : filePaths) {
-            String normalizedPath = normalizeFilePath(filePath);
-
-            if (!checkFileExists(normalizedPath)) {
-                throw new OssException("文件不存在: " + filePath);
-            }
-
-            normalizedPaths.add(normalizedPath);
-        }
-
-        try {
-            for (String normalizedPath : normalizedPaths) {
+            if (isFile) {
+                // 删除文件
                 client.deleteObject(
                     x -> x.bucket(properties.getBucketName())
                         .key(normalizedPath)
                         .build()
                 ).join();
 
-                log.debug("文件删除成功: {}", normalizedPath);
+                log.info("文件删除成功: {}", path);
+            } else {
+                // 删除目录及其所有内容
+                String directoryPrefix = normalizeDirectoryPath(path);
+                int deletedCount = deleteAllObjectsUnderPrefix(directoryPrefix);
+
+                log.info("目录删除成功: {}, 共删除 {} 个对象", path, deletedCount);
             }
 
-            log.info("批量删除成功，共删除 {} 个文件", normalizedPaths.size());
-
         } catch (Exception e) {
-            throw new OssException("批量删除文件失败:[" + e.getMessage() + "]");
+            log.error("删除失败: {}", path, e);
+            if (e instanceof OssException) {
+                throw e;
+            }
+            throw new OssException("删除失败:[" + e.getMessage() + "]");
         }
     }
 
     /**
-     * 删除指定目录及其下的所有文件和子目录
+     * 批量删除多个文件和目录(智能去重,避免重复删除)
+     *
+     * @param paths 文件或目录路径列表
+     * @throws OssException 如果删除失败
      */
-    public void deleteDirectory(String path) {
-        try {
-            String directoryPath = normalizeDirectoryPath(path);
-            int deletedCount = deleteAllFilesInDirectory(directoryPath);
+    public void deleteMultipleFiles(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            throw new OssException("路径列表不能为空");
+        }
 
-            log.info("目录删除成功: {}, 共删除 {} 个对象", path, deletedCount);
+        try {
+            // 第一步: 规范化所有路径并去除完全重复的路径
+            java.util.Set<String> normalizedPathSet = new java.util.LinkedHashSet<>();
+            for (String path : paths) {
+                String normalized = normalizePathForComparison(path);
+                if (!normalized.isEmpty()) {
+                    normalizedPathSet.add(normalized);
+                }
+            }
+
+            // 第二步: 智能过滤,移除被父路径包含的子路径
+            List<String> filteredPaths = filterRedundantPaths(new java.util.ArrayList<>(normalizedPathSet));
+
+            log.info("原始路径数: {}, 去重后路径数: {}", paths.size(), filteredPaths.size());
+
+            // 第三步: 分类路径为文件和目录
+            List<String> filesToDelete = new java.util.ArrayList<>();
+            List<String> directoriesToDelete = new java.util.ArrayList<>();
+
+            for (String path : filteredPaths) {
+                String normalizedPath = normalizePathForComparison(path);
+
+                if (checkFileExists(normalizedPath)) {
+                    filesToDelete.add(normalizedPath);
+                } else if (existsDirectory(path)) {
+                    directoriesToDelete.add(normalizeDirectoryPath(path));
+                } else {
+                    log.warn("路径不存在,跳过: {}", path);
+                }
+            }
+
+            int totalDeletedCount = 0;
+
+            // 第四步: 批量删除文件
+            if (!filesToDelete.isEmpty()) {
+                int fileCount = batchDeleteFiles(filesToDelete);
+                totalDeletedCount += fileCount;
+                log.info("批量删除文件完成,共删除 {} 个文件", fileCount);
+            }
+
+            // 第五步: 删除目录及其内容
+            if (!directoriesToDelete.isEmpty()) {
+                for (String dirPrefix : directoriesToDelete) {
+                    int dirCount = deleteAllObjectsUnderPrefix(dirPrefix);
+                    totalDeletedCount += dirCount;
+                    log.debug("目录删除完成: {}, 共删除 {} 个对象", dirPrefix, dirCount);
+                }
+                log.info("批量删除目录完成,共删除 {} 个目录", directoriesToDelete.size());
+            }
+
+            log.info("批量删除总计完成,共删除 {} 个对象", totalDeletedCount);
 
         } catch (Exception e) {
-            throw new OssException("删除目录失败:[" + e.getMessage() + "]");
+            log.error("批量删除失败", e);
+            if (e instanceof OssException) {
+                throw e;
+            }
+            throw new OssException("批量删除失败:[" + e.getMessage() + "]");
         }
     }
 
@@ -1534,12 +2093,12 @@ public class OssClient {
 
             String targetNormalized = normalizeDirectoryPath(targetPath);
 
-            if (!directoryExists(targetPath)) {
+            if (!existsDirectory(targetPath)) {
                 throw new OssException("目标目录不存在: " + targetPath);
             }
 
             boolean isSourceFile = checkFileExists(sourceNormalized);
-            boolean isSourceDir = !isSourceFile && directoryExists(sourcePath);
+            boolean isSourceDir = !isSourceFile && existsDirectory(sourcePath);
 
             if (!isSourceFile && !isSourceDir) {
                 throw new OssException("源路径不存在: " + sourcePath);

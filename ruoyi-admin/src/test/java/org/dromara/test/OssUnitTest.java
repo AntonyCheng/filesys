@@ -27,7 +27,7 @@ public class OssUnitTest {
         OssClient storage = OssFactory.instance();
 
         // 创建目录
-        if (!storage.directoryExists("/ljch/user_admin")) {
+        if (!storage.existsDirectory("/ljch/user_admin")) {
             storage.createDirectory("/ljch/user_admin");
         }
 
@@ -37,10 +37,10 @@ public class OssUnitTest {
         storage.uploadSingleFile(file.getInputStream(), "/ljch/user_admin/" + originalFileName, file.getSize(), file.getContentType());
 
         // 上传文件夹或者多个文件
-        storage.uploadDirectoryFromZip("/ljch/user_admin", new FileInputStream("D:\\Desktop\\unicom-project\\fileSys\\script.zip"));
+        storage.uploadMultipleFile("/ljch/user_admin", new FileInputStream("D:\\Desktop\\unicom-project\\fileSys\\script.zip"));
 
         // 下载整个目录
-        storage.downloadDirectoryAsZip("/ljch/user_admin", new FileOutputStream("D:\\Desktop\\unicom-project\\fileSys\\download.zip"));
+//        storage.downloadDirectoryAsZip("/ljch/user_admin", new FileOutputStream("D:\\Desktop\\unicom-project\\fileSys\\download.zip"));
 
         // 删除单个文件
         storage.deleteSingleFile("/ljch/user_admin/README.md");
@@ -49,7 +49,7 @@ public class OssUnitTest {
         storage.deleteMultipleFiles(List.of("/ljch/user_admin/script/bin/ry.bat", "/ljch/user_admin/script/docker/database.yml"));
 
         // 删除目录
-        storage.deleteDirectory("/ljch/user_admin/script/sql");
+//        storage.deleteDirectory("/ljch/user_admin/script/sql");
 
         // 移动文件或者目录
         storage.moveDirectory("/ljch/user_admin/script/leave/leave1.json", "/ljch/user_admin");
