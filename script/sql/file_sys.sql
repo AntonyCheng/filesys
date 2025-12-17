@@ -1,17 +1,17 @@
 /*
- Navicat Premium Data Transfer
+ Navicat Premium Dump SQL
 
- Source Server         : localhost-mysql
+ Source Server         : mysql
  Source Server Type    : MySQL
- Source Server Version : 80028 (8.0.28)
+ Source Server Version : 80040 (8.0.40)
  Source Host           : localhost:3306
  Source Schema         : file_sys
 
  Target Server Type    : MySQL
- Target Server Version : 80028 (8.0.28)
+ Target Server Version : 80040 (8.0.40)
  File Encoding         : 65001
 
- Date: 16/12/2025 08:06:42
+ Date: 18/12/2025 00:53:28
 */
 
 SET NAMES utf8mb4;
@@ -45,7 +45,7 @@ CREATE TABLE `gen_table`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`table_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '代码生成业务表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '代码生成业务表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of gen_table
@@ -80,7 +80,7 @@ CREATE TABLE `gen_table_column`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新者',
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`column_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '代码生成业务表字段' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '代码生成业务表字段' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of gen_table_column
@@ -107,7 +107,7 @@ CREATE TABLE `sys_client`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新者',
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统授权表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统授权表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_client
@@ -133,7 +133,7 @@ CREATE TABLE `sys_config`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`config_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '参数配置表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '参数配置表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_config
@@ -167,7 +167,7 @@ CREATE TABLE `sys_dept`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新者',
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`dept_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '部门表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '部门表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_dept
@@ -198,7 +198,7 @@ CREATE TABLE `sys_dict_data`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`dict_code`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '字典数据表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '字典数据表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_dict_data
@@ -255,7 +255,7 @@ CREATE TABLE `sys_dict_type`  (
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`dict_id`) USING BTREE,
   UNIQUE INDEX `tenant_id`(`tenant_id` ASC, `dict_type` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '字典类型表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '字典类型表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_dict_type
@@ -291,7 +291,7 @@ CREATE TABLE `sys_logininfor`  (
   PRIMARY KEY (`info_id`) USING BTREE,
   INDEX `idx_sys_logininfor_s`(`status` ASC) USING BTREE,
   INDEX `idx_sys_logininfor_lt`(`login_time` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统访问记录' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统访问记录' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_logininfor
@@ -329,6 +329,7 @@ INSERT INTO `sys_logininfor` VALUES (2000492764685426689, '000000', 'xiaohong1',
 INSERT INTO `sys_logininfor` VALUES (2000492793491906562, '000000', 'admin', 'pc', 'pc', '0:0:0:0:0:0:0:1', '内网IP', 'Chrome', 'Windows 10 or Windows Server 2016', '0', '登录成功', '2025-12-15 17:07:04');
 INSERT INTO `sys_logininfor` VALUES (2000493083150540801, '000000', 'admin', 'pc', 'pc', '0:0:0:0:0:0:0:1', '内网IP', 'Chrome', 'Windows 10 or Windows Server 2016', '0', '退出成功', '2025-12-15 17:08:13');
 INSERT INTO `sys_logininfor` VALUES (2000493151484141569, '000000', 'xiaohong1', 'pc', 'pc', '0:0:0:0:0:0:0:1', '内网IP', 'Chrome', 'Windows 10 or Windows Server 2016', '0', '登录成功', '2025-12-15 17:08:29');
+INSERT INTO `sys_logininfor` VALUES (2001300859059277826, '000000', 'admin', 'pc', 'pc', '127.0.0.1', '内网IP', 'Chrome', 'Windows 10 or Windows Server 2016', '0', '登录成功', '2025-12-17 22:38:02');
 
 -- ----------------------------
 -- Table structure for sys_menu
@@ -356,17 +357,17 @@ CREATE TABLE `sys_menu`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT '备注',
   PRIMARY KEY (`menu_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '菜单权限表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '菜单权限表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_menu
 -- ----------------------------
-INSERT INTO `sys_menu` VALUES (1, '系统管理', 0, 1, 'system', NULL, '', 1, 0, 'M', '0', '0', '', 'system', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '系统管理目录');
-INSERT INTO `sys_menu` VALUES (2, '系统监控', 0, 3, 'monitor', NULL, '', 1, 0, 'M', '0', '1', '', 'monitor', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 15:15:27', '系统监控目录');
-INSERT INTO `sys_menu` VALUES (3, '系统工具', 0, 4, 'tool', NULL, '', 1, 0, 'M', '0', '1', '', 'tool', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-11 10:24:23', '系统工具目录');
-INSERT INTO `sys_menu` VALUES (4, 'PLUS官网', 0, 5, 'https://gitee.com/dromara/RuoYi-Vue-Plus', NULL, '', 0, 0, 'M', '0', '1', '', 'guide', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 15:13:11', 'RuoYi-Vue-Plus官网地址');
-INSERT INTO `sys_menu` VALUES (5, '测试菜单', 0, 5, 'demo', NULL, '', 1, 0, 'M', '0', '1', '', 'star', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 15:13:02', '测试菜单');
-INSERT INTO `sys_menu` VALUES (6, '租户管理', 0, 2, 'tenant', NULL, '', 1, 0, 'M', '0', '1', '', 'chart', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 15:13:25', '租户管理目录');
+INSERT INTO `sys_menu` VALUES (1, '系统管理', 0, 2, 'system', NULL, '', 1, 0, 'M', '0', '0', '', 'system', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-17 23:52:11', '系统管理目录');
+INSERT INTO `sys_menu` VALUES (2, '系统监控', 0, 4, 'monitor', NULL, '', 1, 0, 'M', '0', '1', '', 'monitor', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-17 23:52:49', '系统监控目录');
+INSERT INTO `sys_menu` VALUES (3, '系统工具', 0, 5, 'tool', NULL, '', 1, 0, 'M', '0', '1', '', 'tool', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-17 23:52:59', '系统工具目录');
+INSERT INTO `sys_menu` VALUES (4, 'PLUS官网', 0, 6, 'https://gitee.com/dromara/RuoYi-Vue-Plus', NULL, '', 0, 0, 'M', '0', '1', '', 'guide', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-17 23:53:24', 'RuoYi-Vue-Plus官网地址');
+INSERT INTO `sys_menu` VALUES (5, '测试菜单', 0, 7, 'demo', NULL, '', 1, 0, 'M', '0', '1', '', 'star', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-17 23:53:33', '测试菜单');
+INSERT INTO `sys_menu` VALUES (6, '租户管理', 0, 3, 'tenant', NULL, '', 1, 0, 'M', '0', '1', '', 'chart', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-17 23:52:21', '租户管理目录');
 INSERT INTO `sys_menu` VALUES (100, '用户管理', 1, 1, 'user', 'system/user/index', '', 1, 0, 'C', '0', '0', 'system:user:list', 'user', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '用户管理菜单');
 INSERT INTO `sys_menu` VALUES (101, '角色管理', 1, 2, 'role', 'system/role/index', '', 1, 0, 'C', '0', '0', 'system:role:list', 'peoples', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '角色管理菜单');
 INSERT INTO `sys_menu` VALUES (102, '菜单管理', 1, 4, 'menu', 'system/menu/index', '', 1, 0, 'C', '0', '0', 'system:menu:list', 'tree-table', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-11 10:57:29', '菜单管理菜单');
@@ -381,7 +382,7 @@ INSERT INTO `sys_menu` VALUES (113, '缓存监控', 2, 5, 'cache', 'monitor/cach
 INSERT INTO `sys_menu` VALUES (115, '代码生成', 3, 2, 'gen', 'tool/gen/index', '', 1, 0, 'C', '0', '0', 'tool:gen:list', 'code', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '代码生成菜单');
 INSERT INTO `sys_menu` VALUES (116, '修改生成配置', 3, 2, 'gen-edit/index/:tableId', 'tool/gen/editTable', '', 1, 1, 'C', '1', '0', 'tool:gen:edit', '#', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '/tool/gen');
 INSERT INTO `sys_menu` VALUES (117, 'Admin监控', 2, 5, 'Admin', 'monitor/admin/index', '', 1, 0, 'C', '0', '0', 'monitor:admin:list', 'dashboard', 103, 1, '2025-12-02 14:34:57', NULL, NULL, 'Admin监控菜单');
-INSERT INTO `sys_menu` VALUES (118, '文件管理', 1, 10, 'oss', 'system/oss/index', '', 1, 0, 'C', '0', '1', 'system:oss:list', 'upload', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-11 10:56:30', '文件管理菜单');
+INSERT INTO `sys_menu` VALUES (118, '文件管理', 1, 10, 'oss', 'system/oss/index', '', 1, 0, 'C', '0', '0', 'system:oss:list', 'upload', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-18 00:22:27', '文件管理菜单');
 INSERT INTO `sys_menu` VALUES (120, '任务调度中心', 2, 6, 'snailjob', 'monitor/snailjob/index', '', 1, 0, 'C', '0', '0', 'monitor:snailjob:list', 'job', 103, 1, '2025-12-02 14:34:57', NULL, NULL, 'SnailJob控制台菜单');
 INSERT INTO `sys_menu` VALUES (121, '租户管理', 6, 1, 'tenant', 'system/tenant/index', '', 1, 0, 'C', '0', '0', 'system:tenant:list', 'list', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '租户管理菜单');
 INSERT INTO `sys_menu` VALUES (122, '租户套餐管理', 6, 2, 'tenantPackage', 'system/tenantPackage/index', '', 1, 0, 'C', '0', '0', 'system:tenantPackage:list', 'form', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '租户套餐管理菜单');
@@ -482,6 +483,8 @@ INSERT INTO `sys_menu` VALUES (1620, '配置列表', 118, 5, '#', '', '', 1, 0, 
 INSERT INTO `sys_menu` VALUES (1621, '配置添加', 118, 6, '#', '', '', 1, 0, 'F', '0', '0', 'system:ossConfig:add', '#', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '');
 INSERT INTO `sys_menu` VALUES (1622, '配置编辑', 118, 6, '#', '', '', 1, 0, 'F', '0', '0', 'system:ossConfig:edit', '#', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '');
 INSERT INTO `sys_menu` VALUES (1623, '配置删除', 118, 6, '#', '', '', 1, 0, 'F', '0', '0', 'system:ossConfig:remove', '#', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '');
+INSERT INTO `sys_menu` VALUES (2001316000769347585, '文件中心', 0, 0, 'filesys_user', 'filesys/user/index', NULL, 1, 0, 'C', '0', '0', NULL, 'list', 100, 1, '2025-12-17 23:38:12', 1, '2025-12-17 23:52:01', '');
+INSERT INTO `sys_menu` VALUES (2001320144456486913, '文件管理', 0, 1, 'filesys_dept', 'filesys/dept/index', NULL, 1, 0, 'C', '0', '0', NULL, 'nested', 100, 1, '2025-12-17 23:54:40', 1, '2025-12-17 23:54:40', '');
 
 -- ----------------------------
 -- Table structure for sys_notice
@@ -501,7 +504,7 @@ CREATE TABLE `sys_notice`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`notice_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '通知公告表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '通知公告表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_notice
@@ -536,7 +539,7 @@ CREATE TABLE `sys_oper_log`  (
   INDEX `idx_sys_oper_log_bt`(`business_type` ASC) USING BTREE,
   INDEX `idx_sys_oper_log_s`(`status` ASC) USING BTREE,
   INDEX `idx_sys_oper_log_ot`(`oper_time` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '操作日志记录' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '操作日志记录' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_oper_log
@@ -607,6 +610,20 @@ INSERT INTO `sys_oper_log` VALUES (1998950193945477121, '000000', '菜单管理'
 INSERT INTO `sys_oper_log` VALUES (1998950232545656833, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '研发部门', '/system/menu', '0:0:0:0:0:0:0:1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":102,\"parentId\":1,\"menuName\":\"菜单管理\",\"orderNum\":4,\"path\":\"menu\",\"component\":\"system/menu/index\",\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"C\",\"visible\":\"0\",\"status\":\"0\",\"perms\":\"system:menu:list\",\"icon\":\"tree-table\",\"remark\":\"菜单管理菜单\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-11 10:57:29', 9);
 INSERT INTO `sys_oper_log` VALUES (1998950411269144578, '000000', '用户管理', 1, 'org.dromara.system.controller.system.SysUserController.add()', 'POST', 1, 'admin', '研发部门', '/system/user', '0:0:0:0:0:0:0:1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":null,\"updateBy\":null,\"updateTime\":null,\"userId\":\"1998950411202035714\",\"deptId\":103,\"userName\":\"ceshi2\",\"nickName\":\"测试2\",\"userType\":null,\"email\":null,\"phonenumber\":null,\"sex\":null,\"status\":\"0\",\"remark\":\"\",\"roleIds\":[4],\"postIds\":[],\"roleId\":null,\"userIds\":null,\"excludeUserIds\":null,\"superAdmin\":false}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-11 10:58:11', 90);
 INSERT INTO `sys_oper_log` VALUES (1998950480395468802, '000000', '用户管理', 1, 'org.dromara.system.controller.system.SysUserController.add()', 'POST', 1, 'admin', '研发部门', '/system/user', '0:0:0:0:0:0:0:1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":null,\"updateBy\":null,\"updateTime\":null,\"userId\":\"1998950480332554241\",\"deptId\":\"1998941822647369730\",\"userName\":\"ceshi3\",\"nickName\":\"测试3\",\"userType\":null,\"email\":null,\"phonenumber\":null,\"sex\":null,\"status\":\"0\",\"remark\":\"\",\"roleIds\":[4],\"postIds\":[],\"roleId\":null,\"userIds\":null,\"excludeUserIds\":null,\"superAdmin\":false}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-11 10:58:28', 93);
+INSERT INTO `sys_oper_log` VALUES (2001316001138446337, '000000', '菜单管理', 1, 'org.dromara.system.controller.system.SysMenuController.add()', 'POST', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":null,\"updateBy\":null,\"updateTime\":null,\"menuId\":null,\"parentId\":0,\"menuName\":\"文件中心\",\"orderNum\":1,\"path\":\"filesys_user\",\"component\":\"filesys/user/index\",\"queryParam\":null,\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"C\",\"visible\":\"0\",\"status\":\"0\",\"icon\":\"list\",\"remark\":null}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:38:12', 97);
+INSERT INTO `sys_oper_log` VALUES (2001319478350680065, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":100,\"createBy\":null,\"createTime\":\"2025-12-17 23:38:12\",\"updateBy\":null,\"updateTime\":null,\"menuId\":\"2001316000769347585\",\"parentId\":0,\"menuName\":\"文件中心\",\"orderNum\":0,\"path\":\"filesys_user\",\"component\":\"filesys/user/index\",\"queryParam\":null,\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"C\",\"visible\":\"0\",\"status\":\"0\",\"icon\":\"list\",\"remark\":\"\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:52:01', 35);
+INSERT INTO `sys_oper_log` VALUES (2001319520734121986, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":1,\"parentId\":0,\"menuName\":\"系统管理\",\"orderNum\":2,\"path\":\"system\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"0\",\"perms\":\"\",\"icon\":\"system\",\"remark\":\"系统管理目录\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:52:11', 23);
+INSERT INTO `sys_oper_log` VALUES (2001319563117563905, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":6,\"parentId\":0,\"menuName\":\"租户管理\",\"orderNum\":3,\"path\":\"tenant\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"1\",\"perms\":\"\",\"icon\":\"chart\",\"remark\":\"租户管理目录\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:52:21', 26);
+INSERT INTO `sys_oper_log` VALUES (2001319678003744770, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":2,\"parentId\":0,\"menuName\":\"系统监控\",\"orderNum\":4,\"path\":\"monitor\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"1\",\"perms\":\"\",\"icon\":\"monitor\",\"remark\":\"系统监控目录\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:52:49', 23);
+INSERT INTO `sys_oper_log` VALUES (2001319720819200002, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":3,\"parentId\":0,\"menuName\":\"系统工具\",\"orderNum\":5,\"path\":\"tool\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"1\",\"perms\":\"\",\"icon\":\"tool\",\"remark\":\"系统工具目录\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:52:59', 17);
+INSERT INTO `sys_oper_log` VALUES (2001319768873340929, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":5,\"parentId\":0,\"menuName\":\"测试菜单\",\"orderNum\":6,\"path\":\"demo\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"1\",\"perms\":\"\",\"icon\":\"star\",\"remark\":\"测试菜单\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:53:10', 19);
+INSERT INTO `sys_oper_log` VALUES (2001319828440846337, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":4,\"parentId\":0,\"menuName\":\"PLUS官网\",\"orderNum\":6,\"path\":\"https://gitee.com/dromara/RuoYi-Vue-Plus\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"0\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"1\",\"perms\":\"\",\"icon\":\"guide\",\"remark\":\"RuoYi-Vue-Plus官网地址\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:53:24', 33);
+INSERT INTO `sys_oper_log` VALUES (2001319865040343041, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":5,\"parentId\":0,\"menuName\":\"测试菜单\",\"orderNum\":7,\"path\":\"demo\",\"component\":null,\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"M\",\"visible\":\"0\",\"status\":\"1\",\"perms\":\"\",\"icon\":\"star\",\"remark\":\"测试菜单\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:53:33', 22);
+INSERT INTO `sys_oper_log` VALUES (2001320144523595778, '000000', '菜单管理', 1, 'org.dromara.system.controller.system.SysMenuController.add()', 'POST', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":null,\"updateBy\":null,\"updateTime\":null,\"menuId\":null,\"parentId\":0,\"menuName\":\"文件管理\",\"orderNum\":1,\"path\":\"filesys_dept\",\"component\":\"filesys/dept/index\",\"queryParam\":null,\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"C\",\"visible\":\"0\",\"status\":\"0\",\"icon\":\"nested\",\"remark\":null}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-17 23:54:40', 18);
+INSERT INTO `sys_oper_log` VALUES (2001321587762630657, '000000', '角色管理', 2, 'org.dromara.system.controller.system.SysRoleController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/role', '127.0.0.1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"roleId\":3,\"roleName\":\"子管理员\",\"roleKey\":\"subadmin\",\"roleSort\":2,\"dataScope\":\"4\",\"menuCheckStrictly\":true,\"deptCheckStrictly\":true,\"status\":\"0\",\"remark\":\"\",\"menuIds\":[\"2001316000769347585\",\"2001320144456486913\"],\"deptIds\":[],\"superAdmin\":false}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-18 00:00:24', 208);
+INSERT INTO `sys_oper_log` VALUES (2001321619316379650, '000000', '角色管理', 2, 'org.dromara.system.controller.system.SysRoleController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/role', '127.0.0.1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"roleId\":4,\"roleName\":\"普通成员\",\"roleKey\":\"common\",\"roleSort\":3,\"dataScope\":\"5\",\"menuCheckStrictly\":true,\"deptCheckStrictly\":true,\"status\":\"0\",\"remark\":\"\",\"menuIds\":[\"2001316000769347585\"],\"deptIds\":[],\"superAdmin\":false}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-18 00:00:31', 70);
+INSERT INTO `sys_oper_log` VALUES (2001327135681777666, '000000', '菜单管理', 2, 'org.dromara.system.controller.system.SysMenuController.edit()', 'PUT', 1, 'admin', '龙江产互', '/system/menu', '127.0.0.1', '内网IP', '{\"createDept\":103,\"createBy\":null,\"createTime\":\"2025-12-02 14:34:57\",\"updateBy\":null,\"updateTime\":null,\"menuId\":118,\"parentId\":1,\"menuName\":\"文件管理\",\"orderNum\":10,\"path\":\"oss\",\"component\":\"system/oss/index\",\"queryParam\":\"\",\"isFrame\":\"1\",\"isCache\":\"0\",\"menuType\":\"C\",\"visible\":\"0\",\"status\":\"0\",\"perms\":\"system:oss:list\",\"icon\":\"upload\",\"remark\":\"文件管理菜单\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-18 00:22:27', 21);
+INSERT INTO `sys_oper_log` VALUES (2001327276442619906, '000000', '对象存储配置', 2, 'org.dromara.system.controller.system.SysOssConfigController.edit()', 'PUT', 1, 'admin', '龙江产互', '/resource/oss/config', '127.0.0.1', '内网IP', '{\"createDept\":null,\"createBy\":null,\"createTime\":null,\"updateBy\":null,\"updateTime\":null,\"ossConfigId\":1,\"configKey\":\"minio\",\"accessKey\":\"minioadmin\",\"secretKey\":\"minioadmin\",\"bucketName\":\"ruoyi\",\"prefix\":\"\",\"endpoint\":\"127.0.0.1:9000\",\"domain\":\"\",\"isHttps\":\"N\",\"status\":\"0\",\"region\":\"\",\"ext1\":\"\",\"remark\":null,\"accessPolicy\":\"1\"}', '{\"code\":200,\"msg\":\"操作成功\",\"data\":null}', 0, '', '2025-12-18 00:23:00', 48);
 
 -- ----------------------------
 -- Table structure for sys_oss
@@ -627,7 +644,7 @@ CREATE TABLE `sys_oss`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新人',
   `service` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'minio' COMMENT '服务商',
   PRIMARY KEY (`oss_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = 'OSS对象存储表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = 'OSS对象存储表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_oss
@@ -659,12 +676,12 @@ CREATE TABLE `sys_oss_config`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`oss_config_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '对象存储配置表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '对象存储配置表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_oss_config
 -- ----------------------------
-INSERT INTO `sys_oss_config` VALUES (1, '000000', 'minio', 'ruoyi', 'ruoyi123', 'ruoyi', '', '127.0.0.1:9000', '', 'N', '', '1', '0', '', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 14:34:57', NULL);
+INSERT INTO `sys_oss_config` VALUES (1, '000000', 'minio', 'minioadmin', 'minioadmin', 'ruoyi', '', '127.0.0.1:9000', '', 'N', '', '1', '0', '', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-18 00:23:00', '');
 INSERT INTO `sys_oss_config` VALUES (2, '000000', 'qiniu', 'XXXXXXXXXXXXXXX', 'XXXXXXXXXXXXXXX', 'ruoyi', '', 's3-cn-north-1.qiniucs.com', '', 'N', '', '1', '1', '', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 14:34:57', NULL);
 INSERT INTO `sys_oss_config` VALUES (3, '000000', 'aliyun', 'XXXXXXXXXXXXXXX', 'XXXXXXXXXXXXXXX', 'ruoyi', '', 'oss-cn-beijing.aliyuncs.com', '', 'N', '', '1', '1', '', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 14:34:57', NULL);
 INSERT INTO `sys_oss_config` VALUES (4, '000000', 'qcloud', 'XXXXXXXXXXXXXXX', 'XXXXXXXXXXXXXXX', 'ruoyi-1240000000', '', 'cos.ap-beijing.myqcloud.com', '', 'N', 'ap-beijing', '1', '1', '', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-02 14:34:57', NULL);
@@ -690,7 +707,7 @@ CREATE TABLE `sys_post`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`post_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '岗位信息表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '岗位信息表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_post
@@ -719,14 +736,14 @@ CREATE TABLE `sys_role`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`role_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色信息表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色信息表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_role
 -- ----------------------------
 INSERT INTO `sys_role` VALUES (1, '000000', '超级管理员', 'superadmin', 1, '1', 1, 1, '0', '0', 103, 1, '2025-12-02 14:34:57', NULL, NULL, '超级管理员');
-INSERT INTO `sys_role` VALUES (3, '000000', '子管理员', 'subadmin', 2, '4', 1, 1, '0', '0', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-11 10:19:14', '');
-INSERT INTO `sys_role` VALUES (4, '000000', '普通成员', 'common', 3, '5', 1, 1, '0', '0', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-11 10:19:47', '');
+INSERT INTO `sys_role` VALUES (3, '000000', '子管理员', 'subadmin', 2, '4', 1, 1, '0', '0', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-18 00:00:24', '');
+INSERT INTO `sys_role` VALUES (4, '000000', '普通成员', 'common', 3, '5', 1, 1, '0', '0', 103, 1, '2025-12-02 14:34:57', 1, '2025-12-18 00:00:31', '');
 
 -- ----------------------------
 -- Table structure for sys_role_dept
@@ -736,7 +753,7 @@ CREATE TABLE `sys_role_dept`  (
   `role_id` bigint NOT NULL COMMENT '角色ID',
   `dept_id` bigint NOT NULL COMMENT '部门ID',
   PRIMARY KEY (`role_id`, `dept_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色和部门关联表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色和部门关联表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_role_dept
@@ -750,11 +767,14 @@ CREATE TABLE `sys_role_menu`  (
   `role_id` bigint NOT NULL COMMENT '角色ID',
   `menu_id` bigint NOT NULL COMMENT '菜单ID',
   PRIMARY KEY (`role_id`, `menu_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色和菜单关联表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色和菜单关联表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_role_menu
 -- ----------------------------
+INSERT INTO `sys_role_menu` VALUES (3, 2001316000769347585);
+INSERT INTO `sys_role_menu` VALUES (3, 2001320144456486913);
+INSERT INTO `sys_role_menu` VALUES (4, 2001316000769347585);
 
 -- ----------------------------
 -- Table structure for sys_social
@@ -791,7 +811,7 @@ CREATE TABLE `sys_social`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '0' COMMENT '删除标志（0代表存在 1代表删除）',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '社会化关系表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '社会化关系表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_social
@@ -823,7 +843,7 @@ CREATE TABLE `sys_tenant`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新者',
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '租户表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '租户表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_tenant
@@ -848,7 +868,7 @@ CREATE TABLE `sys_tenant_package`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新者',
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`package_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '租户套餐表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '租户套餐表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_tenant_package
@@ -881,12 +901,12 @@ CREATE TABLE `sys_user`  (
   `update_time` datetime NULL DEFAULT NULL COMMENT '更新时间',
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`user_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '用户信息表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '用户信息表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_user
 -- ----------------------------
-INSERT INTO `sys_user` VALUES (1, '000000', 100, 'admin', '超级管理员', 'sys_user', 'superadmin@163.com', '17388888888', '1', NULL, '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '0', '0', '0:0:0:0:0:0:0:1', '2025-12-15 17:07:04', 100, 1, '2025-12-02 14:34:57', -1, '2025-12-15 17:07:04', '管理员');
+INSERT INTO `sys_user` VALUES (1, '000000', 100, 'admin', '超级管理员', 'sys_user', 'superadmin@163.com', '17388888888', '1', NULL, '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '0', '0', '127.0.0.1', '2025-12-17 22:38:02', 100, 1, '2025-12-02 14:34:57', -1, '2025-12-17 22:38:02', '管理员');
 INSERT INTO `sys_user` VALUES (1998947134204903426, '000000', 101, 'xiaobing1', '晓冰（子管理员）', 'sys_user', '', '', '0', NULL, '$2a$10$fjXyCsbgw36J8xFkAbXm8utZbPR9rTrZXwMmyItRukH/zY/oWuhgS', '0', '0', '', NULL, 103, 1, '2025-12-11 10:45:10', 1, '2025-12-11 10:50:18', '');
 INSERT INTO `sys_user` VALUES (1998948862065213442, '000000', 103, 'xiaolin1', '晓琳（子管理员）', 'sys_user', '', '', '0', NULL, '$2a$10$p5CDC/Y1/9EvjB7lZG./jOVjc9ZMyuLV3Nu39asm5u6hIFB1A6Hxy', '0', '0', '', NULL, 103, 1, '2025-12-11 10:52:02', 1, '2025-12-11 10:52:02', '');
 INSERT INTO `sys_user` VALUES (1998949045536653313, '000000', 1998941822647369730, 'xiaohong1', '晓红（子管理员）', 'sys_user', '', '', '0', NULL, '$2a$10$dgc4glTIWdMXHdH5mr.5AuVW91aoobX9sSDzNb0J9vNqQOByK6Psy', '0', '0', '0:0:0:0:0:0:0:1', '2025-12-15 17:08:29', 103, 1, '2025-12-11 10:52:46', -1, '2025-12-15 17:08:29', '');
@@ -902,7 +922,7 @@ CREATE TABLE `sys_user_post`  (
   `user_id` bigint NOT NULL COMMENT '用户ID',
   `post_id` bigint NOT NULL COMMENT '岗位ID',
   PRIMARY KEY (`user_id`, `post_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '用户与岗位关联表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '用户与岗位关联表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_user_post
@@ -917,7 +937,7 @@ CREATE TABLE `sys_user_role`  (
   `user_id` bigint NOT NULL COMMENT '用户ID',
   `role_id` bigint NOT NULL COMMENT '角色ID',
   PRIMARY KEY (`user_id`, `role_id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '用户和角色关联表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '用户和角色关联表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of sys_user_role
@@ -950,7 +970,7 @@ CREATE TABLE `test_demo`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新人',
   `del_flag` int NULL DEFAULT 0 COMMENT '删除标志',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '测试单表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '测试单表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of test_demo
@@ -988,7 +1008,7 @@ CREATE TABLE `test_tree`  (
   `update_by` bigint NULL DEFAULT NULL COMMENT '更新人',
   `del_flag` int NULL DEFAULT 0 COMMENT '删除标志',
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '测试树表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '测试树表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of test_tree
