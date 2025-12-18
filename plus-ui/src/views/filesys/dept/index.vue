@@ -15,6 +15,15 @@
     <!-- 操作栏 -->
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
+        <el-button
+          icon="Back"
+          @click="goBack"
+          :disabled="!fileListData?.parentKey"
+        >
+          返回上一级
+        </el-button>
+      </el-col>
+      <el-col :span="1.5">
         <el-button icon="Refresh" @click="refreshList">刷新</el-button>
       </el-col>
     </el-row>
@@ -51,7 +60,7 @@
 <script setup lang="ts" name="DeptFileIndex">
 import { ref, onMounted, computed } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Folder, Document } from '@element-plus/icons-vue';
+import { Folder, Document, Back } from '@element-plus/icons-vue';
 import { deptList } from '@/api/filesys/dept';
 import type { FileList } from '@/api/filesys/types';
 
@@ -117,6 +126,15 @@ const loadFileList = async (path: string = '') => {
 // 导航到指定路径
 const navigateTo = (path: string) => {
   loadFileList(path);
+};
+
+// 返回上一级
+const goBack = () => {
+  if (fileListData.value?.parentKey) {
+    // parentKey 可能是 null 或空字符串，都表示根目录
+    const parentPath = fileListData.value.parentKey || '';
+    loadFileList(parentPath);
+  }
 };
 
 // 刷新列表

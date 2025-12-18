@@ -45,7 +45,8 @@ export const userDownloadSingle = (path: string) => {
     url: '/filesys/user/download/single',
     method: 'get',
     params: { path },
-    responseType: 'blob'
+    responseType: 'blob',
+    timeout: 600000 // 5分钟超时
   });
 };
 
@@ -88,14 +89,17 @@ export const userUploadMultiple = (file: File, path?: string) => {
  * @returns {*}
  */
 export const userDownloadMultiple = (paths: string[]) => {
+  // 使用 URLSearchParams 手动构建查询参数
+  const params = new URLSearchParams();
+  paths.forEach(path => {
+    params.append('paths', path);
+  });
+
   return request({
-    url: '/filesys/user/download/multiple',
+    url: '/filesys/user/download/multiple?' + params.toString(),
     method: 'get',
-    params: { paths },
-    paramsSerializer: {
-      indexes: null // 序列化数组参数
-    },
-    responseType: 'blob'
+    responseType: 'blob',
+    timeout: 600000 // 10分钟超时
   });
 };
 
@@ -105,10 +109,15 @@ export const userDownloadMultiple = (paths: string[]) => {
  * @returns {*}
  */
 export const userDeleteMultiple = (paths: string[]) => {
+  // 使用 URLSearchParams 手动构建查询参数
+  const params = new URLSearchParams();
+  paths.forEach(path => {
+    params.append('paths', path);
+  });
+
   return request({
-    url: '/filesys/user/delete/multiple',
+    url: '/filesys/user/delete/multiple?' + params.toString(),
     method: 'post',
-    params: { paths },
     paramsSerializer: {
       indexes: null
     }
