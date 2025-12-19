@@ -16,6 +16,8 @@ public interface FsFileService {
 
     JSONObject selectUserFileList(String path);
 
+    void createUserDirectory(String path);
+
     void uploadUserFileSingle(MultipartFile file, String path);
 
     void downloadUserFileSingle(String path, HttpServletResponse response);

@@ -45,6 +45,15 @@ public class FsFileServiceImpl implements FsFileService {
     }
 
     @Override
+    public void createUserDirectory(String path) {
+        String userPath = getBaseUserPath();
+        if (path.isEmpty()) {
+            return;
+        }
+        OssFactory.instance().createDirectory(userPath + "/" + path);
+    }
+
+    @Override
     public void uploadUserFileSingle(MultipartFile file, String path) {
         String userPath = getBaseUserPath();
         String fileName = StringUtils.isEmpty(file.getOriginalFilename()) ? file.getName() : file.getOriginalFilename();
@@ -120,7 +129,7 @@ public class FsFileServiceImpl implements FsFileService {
             throw new ServiceException("输入路径为空");
         }
         String userPath = getBaseUserPath();
-        List<String> targetFiles = paths.stream().peek(p->{
+        List<String> targetFiles = paths.stream().peek(p -> {
             if (Objects.isNull(p) || StringUtils.equals(p, "") || StringUtils.equals(p, "/")) {
                 throw new ServiceException("不可删除根路径");
             }

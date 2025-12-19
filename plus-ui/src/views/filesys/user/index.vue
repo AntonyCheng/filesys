@@ -24,6 +24,11 @@
         </el-button>
       </el-col>
       <el-col :span="1.5">
+        <el-button type="info" icon="FolderAdd" @click="handleCreateFolder">
+          创建文件夹
+        </el-button>
+      </el-col>
+      <el-col :span="1.5">
         <el-button type="primary" icon="Upload" @click="handleUploadSingle">
           上传文件
         </el-button>
@@ -65,14 +70,14 @@
       @selection-change="handleSelectionChange"
       @row-dblclick="handleRowDblClick"
     >
-      <el-table-column type="selection" width="55" />
+      <el-table-column type="selection" width="55"/>
       <el-table-column label="名称" prop="name" min-width="200">
         <template #default="scope">
           <el-icon v-if="scope.row.type === 'folder'" style="margin-right: 5px">
-            <Folder />
+            <Folder/>
           </el-icon>
           <el-icon v-else style="margin-right: 5px">
-            <Document />
+            <Document/>
           </el-icon>
           <el-link
             :underline="false"
@@ -83,8 +88,8 @@
           </el-link>
         </template>
       </el-table-column>
-      <el-table-column label="修改时间" prop="lastModified" width="180" />
-      <el-table-column label="大小" prop="sizeStr" width="120" />
+      <el-table-column label="修改时间" prop="lastModified" width="180"/>
+      <el-table-column label="大小" prop="sizeStr" width="120"/>
       <el-table-column label="操作" width="220">
         <template #default="scope">
           <el-button
@@ -136,7 +141,9 @@
         :on-exceed="handleExceedSingle"
         drag
       >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+        <el-icon class="el-icon--upload">
+          <upload-filled/>
+        </el-icon>
         <div class="el-upload__text">
           拖拽文件到此处或 <em>点击上传</em>
         </div>
@@ -165,7 +172,9 @@
         @dragleave.prevent="dragOver = false"
         :class="{ 'is-dragover': dragOver }"
       >
-        <el-icon class="upload-icon"><upload-filled /></el-icon>
+        <el-icon class="upload-icon">
+          <upload-filled/>
+        </el-icon>
         <div class="upload-text">
           拖拽文件或文件夹到此处
         </div>
@@ -201,7 +210,9 @@
         </div>
         <div class="selected-files-list">
           <div v-for="(file, index) in selectedFiles.slice(0, 10)" :key="index" class="file-item">
-            <el-icon><Document /></el-icon>
+            <el-icon>
+              <Document/>
+            </el-icon>
             <span class="file-name">{{ file.path }}</span>
             <span class="file-size">{{ formatFileSize(file.file.size) }}</span>
           </div>
@@ -233,22 +244,23 @@
 
 <script setup lang="ts" name="UserFileIndex">
 import FilePreview from '@/components/FilePreview/index.vue';
-import { canPreview } from '@/components/FilePreview/utils';
-import { ref, onMounted, computed } from 'vue';
-import { ElMessage, ElMessageBox, genFileId } from 'element-plus';
-import type { UploadInstance, UploadProps, UploadRawFile, UploadUserFile } from 'element-plus';
-import { Folder, Document, UploadFilled, Back } from '@element-plus/icons-vue';
+import {canPreview} from '@/components/FilePreview/utils';
+import {computed, onMounted, ref} from 'vue';
+import type {UploadInstance, UploadProps, UploadRawFile, UploadUserFile} from 'element-plus';
+import {ElMessage, ElMessageBox, genFileId} from 'element-plus';
+import {Document, Folder, UploadFilled} from '@element-plus/icons-vue';
 import JSZip from 'jszip';
 import {
-  userList,
-  userUploadSingle,
-  userDownloadSingle,
+  userCreateDirectory,
+  userDeleteMultiple,
   userDeleteSingle,
-  userUploadMultiple,
   userDownloadMultiple,
-  userDeleteMultiple
+  userDownloadSingle,
+  userList,
+  userUploadMultiple,
+  userUploadSingle
 } from '@/api/filesys/user';
-import type { FileList, Folder as FolderType, File as FileType } from '@/api/filesys/types';
+import type {FileList} from '@/api/filesys/types';
 
 // 数据定义
 const loading = ref(false);
@@ -326,7 +338,7 @@ const formatFileSize = (bytes: number): string => {
 const loadFileList = async (path: string = '') => {
   loading.value = true;
   try {
-    const { data } = await userList(path);
+    const {data} = await userList(path);
     fileListData.value = data;
     currentPath.value = path;
   } catch (error) {
@@ -373,6 +385,28 @@ const handleItemClick = (row: any) => {
     loadFileList(row.key);
   }
 };
+
+// 创建文件夹
+const handleCreateFolder = async () => {
+  try {
+    const {value} = await ElMessageBox.prompt('请输入文件夹名称', '创建文件夹', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPattern: /^[^\\/:*?"<>|]+$/,
+      inputErrorMessage: '文件夹名称不能包含特殊字符'
+    });
+
+    const path = currentPath.value ? `${currentPath.value}/${value}` : value;
+    await userCreateDirectory(path);
+    ElMessage.success('创建成功');
+    refreshList();
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('创建失败');
+    }
+  }
+};
+
 
 // 上传单个文件
 const handleUploadSingle = () => {
@@ -566,7 +600,7 @@ const submitUploadMultiple = async () => {
     });
 
     // 创建 File 对象
-    const zipFile = new File([zipBlob], 'upload.zip', { type: 'application/zip' });
+    const zipFile = new File([zipBlob], 'upload.zip', {type: 'application/zip'});
 
     ElMessage.info('开始上传...');
 

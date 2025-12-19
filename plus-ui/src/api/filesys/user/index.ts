@@ -16,6 +16,19 @@ export const userList = (path?: string): AxiosPromise<FileList> => {
 };
 
 /**
+ * 用户创建文件夹
+ * @param path
+ * @returns {*}
+ */
+export const userCreateDirectory = (path?: string) => {
+  return request({
+    url: '/filesys/user/create/directory',
+    method: 'get',
+    params: { path: path }
+  });
+};
+
+/**
  * 用户上传单个文件
  * @param file
  * @param path

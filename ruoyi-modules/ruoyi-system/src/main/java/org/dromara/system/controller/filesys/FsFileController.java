@@ -38,6 +38,16 @@ public class FsFileController {
     }
 
     /**
+     * 用户创建文件夹
+     */
+    @GetMapping("/user/create/directory")
+    @SaCheckRole(value = {"superadmin", "subadmin", "common"}, mode = SaMode.OR)
+    public R<String> userCreateDirectory(@RequestParam(value = "path") String path) {
+        fileService.createUserDirectory(handlePath(path));
+        return R.ok("创建成功");
+    }
+
+    /**
      * 用户上传单个文件
      */
     @PostMapping("/user/upload/single")
