@@ -85,8 +85,26 @@
       </el-table-column>
       <el-table-column label="修改时间" prop="lastModified" width="180" />
       <el-table-column label="大小" prop="sizeStr" width="120" />
-      <el-table-column label="操作" width="180">
+      <el-table-column label="操作" width="220">
         <template #default="scope">
+          <el-button
+            v-if="scope.row.type === 'file' && canPreviewFile(scope.row.name)"
+            link
+            type="success"
+            icon="View"
+            @click="handlePreview(scope.row)"
+          >
+            点击预览
+          </el-button>
+          <el-button
+            v-else-if="scope.row.type === 'file'"
+            link
+            type="danger"
+            icon="Hide"
+            disabled
+          >
+            暂不支持
+          </el-button>
           <el-button
             v-if="scope.row.type === 'file'"
             link
@@ -205,10 +223,17 @@
         </el-button>
       </template>
     </el-dialog>
+    <FilePreview
+      v-model="previewVisible"
+      :file-key="previewFileKey"
+      :file-name="previewFileName"
+    />
   </div>
 </template>
 
 <script setup lang="ts" name="UserFileIndex">
+import FilePreview from '@/components/FilePreview/index.vue';
+import { canPreview } from '@/components/FilePreview/utils';
 import { ref, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox, genFileId } from 'element-plus';
 import type { UploadInstance, UploadProps, UploadRawFile, UploadUserFile } from 'element-plus';
@@ -241,7 +266,22 @@ const dragOver = ref(false);
 const fileInputRef = ref<HTMLInputElement>();
 const folderInputRef = ref<HTMLInputElement>();
 const selectedFiles = ref<Array<{ file: File; path: string }>>([]);
+// 添加预览相关的状态
+const previewVisible = ref(false);
+const previewFileKey = ref('');
+const previewFileName = ref('');
 
+// 判断是否可预览
+const canPreviewFile = (fileName: string) => {
+  return canPreview(fileName);
+};
+
+// 处理预览
+const handlePreview = (row: any) => {
+  previewFileKey.value = row.key;
+  previewFileName.value = row.name;
+  previewVisible.value = true;
+};
 // 表格数据
 const tableData = computed(() => {
   if (!fileListData.value) return [];
